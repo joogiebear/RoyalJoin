@@ -1,0 +1,33 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Per-world items
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Name a file after the world it applies to — hub.yml, farming.yml, resource.yml —
+#  and it defines the items for that world.
+#
+#  Worlds with no file here use the items from config.yml, so if one setup suits
+#  every world you never need this folder at all.
+#
+#  Files starting with _ (like this one) are examples and are ignored.
+#
+#  Reload with /royaljoin reload.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# false - this world's items REPLACE the config.yml ones (a world with its own kit)
+# true  - they are ADDED to the config.yml ones, and win where an id is the same
+#         (a shared menu item everywhere, plus something extra here)
+inherit-default: false
+
+items:
+
+  # Same options as config.yml. See there for the full list.
+  farm-menu:
+    slot: 9
+    material: WHEAT
+    name: "&aFarming Menu"
+    lore:
+      - "&7Right-click for farming shops"
+      - "&7and collection rewards."
+    command: "farmmenu"
+    click: right
+    locked: true
+    keep-on-death: true

@@ -1,0 +1,78 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalJoin  ·  Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Pins items to hotbar slots. Clicking one runs a command — usually to open a
+#  menu, so players don't have to remember commands.
+#
+#  Apply changes at runtime with /royaljoin reload. Nothing here is fixed in
+#  code: the slot, material, name, lore and command are all yours.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+items:
+
+  # The key ('menu') is this item's id. Add more entries for more items.
+  menu:
+
+    # Hotbar position, 1-9 left to right. 9 is the far-right slot.
+    slot: 9
+
+    # Any Minecraft item id.
+    material: NETHER_STAR
+
+    # Hover name and lore. '&' colour codes; italics are off by default.
+    name: "&6&lMenu"
+    lore:
+      - "&7Right-click to open the menu."
+
+    # The command to run, without the leading slash. %player% becomes their name.
+    command: "menu"
+
+    # false - run as the player (respects their permissions)
+    # true  - run from console (use for commands players may not have access to)
+    as-console: false
+
+    # Which click opens it: right, left, or either.
+    click: right
+
+    # Leave empty to give it to everyone, or require a permission node.
+    permission: ""
+
+    # Which worlds this item appears in. Empty list = every world.
+    #   blacklist - every world EXCEPT those listed
+    #   whitelist - ONLY the worlds listed
+    worlds: []
+    world-mode: blacklist
+
+    # true - the item can't be moved, dropped, stored in a chest or swapped to
+    #        the off-hand. Stops it being lost, and stops copies being stashed.
+    locked: true
+
+    # true - kept through death instead of dropping with everything else.
+    keep-on-death: true
+
+    # Adds the enchantment shimmer without an enchantment.
+    glow: false
+
+settings:
+  # Logs every click on one of these items and what the command did. Turn on when a
+  # button isn't doing what you expect; leave off otherwise.
+  debug: false
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# Two stages. The gap stops a menu re-opening while a click is held; the burst
+# guard catches auto-clickers, which would otherwise happily fire at exactly the
+# gap interval forever.
+cooldown:
+  # Minimum milliseconds between two activations.
+  between-uses-ms: 400
+
+  # This many activations inside the window trips a lockout. 0 disables the guard.
+  spam-threshold: 6
+  spam-window-ms: 3000
+
+  # How long the item ignores clicks once tripped.
+  lockout-seconds: 5
+
+  # Sent once, when the lockout starts. %seconds% is how long it lasts.
+  # Leave empty to say nothing at all.
+  message: "&cEasy — that's on cooldown for %seconds%s."
