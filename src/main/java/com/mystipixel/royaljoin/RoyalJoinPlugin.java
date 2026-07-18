@@ -24,12 +24,12 @@ import java.util.Map;
  */
 public final class RoyalJoinPlugin extends JavaPlugin {
 
-    /** Items from config.yml — the default set, used by any world without a file of its own. */
+    /** Items from config.yml — the catch-all, used by any world without a file of its own. */
     private final Map<String, HotbarItem> defaults = new LinkedHashMap<>();
     /** world name (lowercase) → that world's items, from worlds/<world>.yml. */
     private final Map<String, Map<String, HotbarItem>> perWorld = new LinkedHashMap<>();
-    /** world name (lowercase) → whether its file adds to the defaults rather than replacing them. */
-    private final Map<String, Boolean> inheritsDefaults = new LinkedHashMap<>();
+    /** world name (lowercase) → whether its file adds to the config.yml items rather than replacing them. */
+    private final Map<String, Boolean> inheritsDefault = new LinkedHashMap<>();
     private ItemService itemService;
     private final CooldownTracker cooldowns = new CooldownTracker();
 
@@ -67,10 +67,12 @@ public final class RoyalJoinPlugin extends JavaPlugin {
     }
 
     /**
-     * Re-read every item definition: config.yml for the defaults, then one file per world.
+     * Re-read every item definition.
      *
-     * <p>A world with no file of its own uses the defaults, so the common case — one item, everywhere —
-     * needs no worlds folder at all. Invalid entries are skipped with a reason rather than being fatal.
+     * <p>config.yml holds the items that apply everywhere — the catch-all. A world only needs a file in
+     * worlds/ when it wants something different, so a server with one setup never touches that folder.
+     *
+     * <p>Invalid entries are skipped with a reason rather than being fatal.
      */
     public void reloadItems() {
         reloadConfig();
@@ -82,7 +84,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
 
         defaults.clear();
         perWorld.clear();
-        inheritsDefaults.clear();
+        inheritsDefault.clear();
 
         readItems(getConfig().getConfigurationSection("items"), defaults, "config.yml");
         if (defaults.isEmpty()) {
@@ -92,7 +94,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         loadWorldFiles();
     }
 
-    /** Load worlds/<world>.yml. Files starting with _ are treated as examples and skipped. */
+    /** Load worlds/<world>.yml. Files starting with _ are examples and skipped. */
     private void loadWorldFiles() {
         File folder = new File(getDataFolder(), "worlds");
         if (!folder.isDirectory()) {
@@ -116,10 +118,10 @@ public final class RoyalJoinPlugin extends JavaPlugin {
             Map<String, HotbarItem> loaded = new LinkedHashMap<>();
             readItems(cfg.getConfigurationSection("items"), loaded, "worlds/" + fileName);
             perWorld.put(world, loaded);
-            inheritsDefaults.put(world, cfg.getBoolean("inherit-default", false));
+            inheritsDefault.put(world, cfg.getBoolean("inherit-default", false));
         }
         if (!perWorld.isEmpty()) {
-            getLogger().info("Loaded per-world items for: " + String.join(", ", perWorld.keySet()) + ".");
+            getLogger().info("Per-world items: " + String.join(", ", perWorld.keySet()) + ".");
         }
     }
 
@@ -151,7 +153,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         if (specific == null) {
             return new ArrayList<>(defaults.values());
         }
-        if (!inheritsDefaults.getOrDefault(key, false)) {
+        if (!inheritsDefault.getOrDefault(key, false)) {
             return new ArrayList<>(specific.values());
         }
         // inherit-default: the world's own entries win where ids collide.

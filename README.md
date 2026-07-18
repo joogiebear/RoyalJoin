@@ -39,10 +39,14 @@ Add more entries under `items:` for more items.
 
 ### Per-world items — `worlds/<world>.yml`
 
-Name a file after a world and it defines that world's items:
+`config.yml` is the catch-all: its items apply in every world, which is all most servers need. A world
+only needs a file when it wants something different.
+
+Name the file after the world — `farm.yml` for a world called `farm` — and it takes over there:
 
 ```yaml
-inherit-default: false        # false replaces the config.yml items, true adds to them
+inherit-default: false        # false replaces the config.yml items for this world
+                              # true  gives the config.yml items PLUS these
 
 items:
   farm-menu:
@@ -52,13 +56,16 @@ items:
     command: "farmmenu"
 ```
 
-Worlds with no file use `config.yml`, so if one setup suits every world you never need this folder.
-Files starting with `_` are examples and ignored.
+Anything without a file of its own falls back to `config.yml`, so a hub, an end world and dynamically
+named worlds all work with no configuration. Files starting with `_` are examples and ignored.
 
 Two ways to scope an item, worth choosing deliberately:
 
-- **`worlds:` on an item** — one shared item, hidden in some worlds
-- **`worlds/<world>.yml`** — a whole different kit for that world
+- **`worlds:` on an item in `config.yml`** — one shared item, hidden in (or limited to) named worlds
+- **`worlds/<world>.yml`** — a whole different set for that world
+
+Worlds are matched by exact name. There's no pattern matching, so a world whose name isn't known ahead
+of time — one generated per player, for example — always uses the `config.yml` items.
 
 ### Rate limiting
 
@@ -120,8 +127,19 @@ startup.
 ### Interaction with per-profile inventories
 
 If another plugin swaps a player's whole inventory — a per-profile skyblock system, for example — it
-may capture this plugin's item into its saved inventory and hand it back later, producing duplicates
-or losing it. Where that plugin can exclude a slot from its snapshot, exclude the one used here.
+may capture this plugin's item into its saved inventory and hand it back on a different profile,
+producing duplicates or losing it. Where that plugin can exclude a slot from its snapshot, exclude the
+one used here.
+
+For RoyalSkyblock, that is:
+
+```yaml
+profile:
+  externally-managed-hotbar-slots: [9]
+```
+
+Those slots are left out of the profile snapshot on save and untouched on load, so the item stays put
+across a profile switch.
 
 ---
 

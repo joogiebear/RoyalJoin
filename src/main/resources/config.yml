@@ -4,8 +4,13 @@
 #  Pins items to hotbar slots. Clicking one runs a command — usually to open a
 #  menu, so players don't have to remember commands.
 #
-#  Apply changes at runtime with /royaljoin reload. Nothing here is fixed in
-#  code: the slot, material, name, lore and command are all yours.
+#  The items below apply in EVERY world. That is all most servers need.
+#
+#  If one world wants something different, add worlds/<world name>.yml — see
+#  worlds/_example.yml. Anything without a file of its own falls back to here.
+#
+#  Apply changes at runtime with /royaljoin reload. Nothing is fixed in code:
+#  the slot, material, name, lore and command are all yours.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 items:
@@ -28,7 +33,7 @@ items:
     command: "menu"
 
     # false - run as the player (respects their permissions)
-    # true  - run from console (use for commands players may not have access to)
+    # true  - run from console (for commands players may not have access to)
     as-console: false
 
     # Which click opens it: right, left, or either.
@@ -37,14 +42,14 @@ items:
     # Leave empty to give it to everyone, or require a permission node.
     permission: ""
 
-    # Which worlds this item appears in. Empty list = every world.
+    # Narrow this one item to certain worlds without giving them their own file.
+    # Empty list = every world.
     #   blacklist - every world EXCEPT those listed
     #   whitelist - ONLY the worlds listed
     worlds: []
     world-mode: blacklist
 
-    # true - the item can't be moved, dropped, stored in a chest or swapped to
-    #        the off-hand. Stops it being lost, and stops copies being stashed.
+    # true - can't be moved, dropped, stored in a chest or swapped to the off-hand.
     locked: true
 
     # true - kept through death instead of dropping with everything else.
@@ -52,11 +57,6 @@ items:
 
     # Adds the enchantment shimmer without an enchantment.
     glow: false
-
-settings:
-  # Logs every click on one of these items and what the command did. Turn on when a
-  # button isn't doing what you expect; leave off otherwise.
-  debug: false
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 # Two stages. The gap stops a menu re-opening while a click is held; the burst
@@ -76,3 +76,8 @@ cooldown:
   # Sent once, when the lockout starts. %seconds% is how long it lasts.
   # Leave empty to say nothing at all.
   message: "&cEasy — that's on cooldown for %seconds%s."
+
+settings:
+  # Logs every click on one of these items and what the command did. Turn on when a
+  # button isn't doing what you expect; leave off otherwise.
+  debug: false

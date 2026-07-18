@@ -4,7 +4,7 @@
 #  Name a file after the world it applies to — hub.yml, farming.yml, resource.yml —
 #  and it defines the items for that world.
 #
-#  Worlds with no file here use the items from config.yml, so if one setup suits
+#  Worlds with no file here use the items in config.yml, so if one setup suits
 #  every world you never need this folder at all.
 #
 #  Files starting with _ (like this one) are examples and are ignored.
