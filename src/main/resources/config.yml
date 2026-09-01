@@ -25,12 +25,18 @@ items:
     material: NETHER_STAR
 
     # Hover name and lore. '&' colour codes; italics are off by default.
+    # PlaceholderAPI placeholders work here when PAPI is installed, refreshed each
+    # time the item is applied (join, respawn, world change, /royaljoin reload).
     name: "&6&lMenu"
     lore:
       - "&7Right-click to open the menu."
 
-    # The command to run, without the leading slash. %player% becomes their name.
+    # The command to run, without the leading slash. %player% becomes their name;
+    # PlaceholderAPI placeholders resolve at the moment of the click.
     command: "menu"
+
+    # Resource-pack icon: sets the item's custom_model_data. Remove for none.
+    #custom-model-data: 1001
 
     # false - run as the player (respects their permissions)
     # true  - run from console (for commands players may not have access to)
