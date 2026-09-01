@@ -100,7 +100,7 @@ public final class ItemService {
                 return;
             }
         }
-        inv.setItem(slot, item.build(key));
+        inv.setItem(slot, item.build(key, player));
     }
 
 }

@@ -209,7 +209,8 @@ public final class JoinListener implements Listener {
             return;
         }
 
-        String command = item.command().replace("%player%", player.getName());
+        String command = com.mystipixel.royaljoin.util.Papi.apply(player,
+                item.command().replace("%player%", player.getName()));
         boolean handled;
         if (item.asConsole()) {
             handled = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);

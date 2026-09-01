@@ -54,10 +54,12 @@ public final class HotbarItem {
     private final boolean keepOnDeath;
     private final ClickType click;
     private final boolean glow;
+    private final int customModelData;   // -1 = none
 
     private HotbarItem(String id, int slot, Material material, String name, List<String> lore, String command,
                        boolean asConsole, String permission, List<String> worlds, boolean whitelist,
-                       boolean locked, boolean keepOnDeath, ClickType click, boolean glow) {
+                       boolean locked, boolean keepOnDeath, ClickType click, boolean glow,
+                       int customModelData) {
         this.id = id;
         this.slot = slot;
         this.material = material;
@@ -72,6 +74,7 @@ public final class HotbarItem {
         this.keepOnDeath = keepOnDeath;
         this.click = click;
         this.glow = glow;
+        this.customModelData = customModelData;
     }
 
     /**
@@ -115,24 +118,32 @@ public final class HotbarItem {
                 sec.getBoolean("locked", true),
                 sec.getBoolean("keep-on-death", true),
                 ClickType.parse(sec.getString("click", "right"), logger, id),
-                sec.getBoolean("glow", false));
+                sec.getBoolean("glow", false),
+                sec.getInt("custom-model-data", -1));
     }
 
-    /** Build the item, tagged so it can be recognised later regardless of how it was renamed. */
-    public ItemStack build(org.bukkit.NamespacedKey key) {
+    /**
+     * Build the item for this player, tagged so it can be recognised later regardless of renames.
+     * Name and lore go through PlaceholderAPI (when installed), so they are as fresh as the last
+     * apply — join, respawn, world change or reload.
+     */
+    public ItemStack build(org.bukkit.NamespacedKey key, Player player) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            meta.displayName(Text.item(name));
+            meta.displayName(Text.item(com.mystipixel.royaljoin.util.Papi.apply(player, name)));
             if (!lore.isEmpty()) {
                 List<net.kyori.adventure.text.Component> lines = new ArrayList<>(lore.size());
                 for (String line : lore) {
-                    lines.add(Text.item(line));
+                    lines.add(Text.item(com.mystipixel.royaljoin.util.Papi.apply(player, line)));
                 }
                 meta.lore(lines);
             }
             if (glow) {
                 meta.setEnchantmentGlintOverride(true);
+            }
+            if (customModelData >= 0) {
+                meta.setCustomModelData(customModelData);
             }
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
             // The tag is what identifies our item. Matching on material or name would break the moment a
