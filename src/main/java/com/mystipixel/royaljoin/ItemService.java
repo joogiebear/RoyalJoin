@@ -89,8 +89,12 @@ public final class ItemService {
         int slot = item.slot();
         ItemStack existing = inv.getItem(slot);
         if (existing != null && !existing.getType().isAir()) {
-            Map<Integer, ItemStack> leftover = inv.addItem(existing.clone());
+            // Empty the slot before addItem, or a stackable item merges the copy back into the very
+            // slot being vacated and the setItem below destroys it.
+            inv.setItem(slot, null);
+            Map<Integer, ItemStack> leftover = inv.addItem(existing);
             if (!leftover.isEmpty()) {
+                inv.setItem(slot, leftover.values().iterator().next());
                 plugin.getLogger().fine("Inventory full for " + player.getName() + "; leaving slot "
                         + (slot + 1) + " alone rather than dropping their item.");
                 return;
