@@ -1,7 +1,7 @@
 name: RoyalJoin
 version: ${version}
 main: com.mystipixel.royaljoin.RoyalJoinPlugin
-api-version: '1.21'
+api-version: '26.2'
 author: Mystipixel
 description: Pins configurable items to players' hotbar slots that run a command when clicked.
 commands:
