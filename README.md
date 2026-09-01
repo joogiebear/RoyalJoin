@@ -149,4 +149,4 @@ across a profile switch.
 mvn clean package     # target/RoyalJoin.jar
 ```
 
-Requires JDK 25 to build (paper-api 26.2 ships Java 25 bytecode); runs on Java 21+.
+Requires Paper 26.2 or newer to run, and JDK 25 to build (paper-api 26.2 ships Java 25 bytecode).
