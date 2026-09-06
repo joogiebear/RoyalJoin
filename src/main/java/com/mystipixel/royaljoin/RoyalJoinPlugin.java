@@ -1,6 +1,8 @@
 package com.mystipixel.royaljoin;
 
 import com.mystipixel.royaljoin.command.RoyalJoinCommand;
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -23,6 +25,9 @@ import java.util.Map;
  * works the same whether that opens a menu from this suite, another plugin's GUI, or a warp.
  */
 public final class RoyalJoinPlugin extends JavaPlugin {
+
+    /** bStats project id. Identifies the plugin, not the server, so it is fixed rather than configurable. */
+    private static final int BSTATS_PLUGIN_ID = 33888;
 
     /** Items from config.yml — the catch-all, used by any world without a file of its own. */
     private final Map<String, HotbarItem> defaults = new LinkedHashMap<>();
@@ -52,7 +57,25 @@ public final class RoyalJoinPlugin extends JavaPlugin {
             itemService.apply(player);
         }
 
+        setupMetrics();
         getLogger().info("RoyalJoin enabled — " + itemCount() + " item(s) configured.");
+    }
+
+    /**
+     * Anonymous usage reporting via bStats.
+     *
+     * <p>Server owners who want no reporting disable it globally in plugins/bStats/config.yml, which
+     * is the mechanism bStats provides; the id itself is fixed because it names this plugin's project.
+     */
+    private void setupMetrics() {
+        Metrics metrics = new Metrics(this, BSTATS_PLUGIN_ID);
+        metrics.addCustomChart(new SimplePie("item_count", () -> String.valueOf(itemCount())));
+        // Whether the worlds/ folder is being used at all — the per-world override is the part of
+        // this plugin most likely to be dead weight, so it is worth knowing if anyone reaches for it.
+        metrics.addCustomChart(new SimplePie("per_world_items",
+                () -> String.valueOf(!perWorld.isEmpty())));
+        metrics.addCustomChart(new SimplePie("placeholderapi",
+                () -> String.valueOf(Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))));
     }
 
     @Override

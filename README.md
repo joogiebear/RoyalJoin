@@ -143,6 +143,13 @@ across a profile switch.
 
 ---
 
+## Metrics
+
+Reports anonymous usage to [bStats](https://bstats.org/plugin/bukkit/RoyalJoin/33888). Turn it off for
+the whole server in `plugins/bStats/config.yml`.
+
+---
+
 ## Building
 
 ```bash
