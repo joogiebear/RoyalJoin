@@ -1,3 +1,12 @@
+## 2026.39.1 — 2026-09-24
+
+### 🐛 Fixes
+- only block item frames and allays for pinned items (`5631047`)
+- close ways a pinned item could escape or outlive its permission (`7f6a244`)
+
+### 📝 Documentation
+- add MIT license (`d16966f`)
+
 ## 2026.39.0 — 2026-09-23
 
 ### 🔧 Other
