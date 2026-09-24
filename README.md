@@ -27,11 +27,10 @@ items:
     command: "menu"           # no leading slash; %player% becomes their name
     as-console: false         # true runs it from console, for commands players can't use
     click: right              # right, left, or either
-    permission: ""            # empty gives it to everyone
+    permission: ""            # empty gives it to everyone; re-checked on every click
     worlds: []                # empty means every world
     world-mode: blacklist     # blacklist = all except those listed; whitelist = only those
-    locked: true              # can't be moved, dropped, stored or swapped to the off-hand
-    keep-on-death: true
+    locked: true              # can't be moved, dropped, stored, swapped to the off-hand or framed
     glow: false
 ```
 
@@ -83,7 +82,8 @@ exactly the delay. The burst guard catches that pattern and stops it for a few s
 
 The message is sent **once**, when the lockout starts — messaging every blocked click would turn an
 auto-clicker into chat spam, which is worse than what's being prevented. Set it to `""` for silence.
-Ordinary use never accumulates toward a lockout; the window rolls forward once it elapses.
+Ordinary use never accumulates toward a lockout: the window slides, counting only the uses inside
+the last `spam-window-ms`.
 
 ---
 
@@ -114,6 +114,19 @@ world change.
 first, wherever they ended up. So duplicates can't accumulate, and changing a slot in config doesn't
 leave the old copy behind. World change matters more than it looks: it's also what fires when another
 plugin moves a player between worlds, so items survive things this plugin knows nothing about.
+
+**Permission and world are checked at the click, too.** A player who loses an item's permission
+mid-session — an expired rank, say — can't keep using it; the click takes it back instead.
+
+**Items never drop on death.** They're taken out of the death drops before grave or death-chest
+plugins see them, and respawning hands out a fresh copy. (The old `keep-on-death` option is no longer
+read — leaving it in your config does nothing.)
+
+**Two items in one slot get a warning at load.** The later one in the config pushes the earlier to a
+free slot, which is almost never what was meant.
+
+**Careful with placeholders in `as-console` commands.** A placeholder whose value players control — a
+nickname, a display name — puts their text into a command run with full console rights.
 
 **Items are identified by a tag, not by material or name.** Renaming one, or configuring two items
 that share a material, doesn't confuse it.

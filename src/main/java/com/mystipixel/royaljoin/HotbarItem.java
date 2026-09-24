@@ -1,7 +1,10 @@
 package com.mystipixel.royaljoin;
 
+import com.mystipixel.royaljoin.util.Papi;
 import com.mystipixel.royaljoin.util.Text;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
@@ -51,14 +54,13 @@ public final class HotbarItem {
     private final List<String> worlds;   // empty = every world
     private final boolean whitelist;     // how the world list is read
     private final boolean locked;        // can't be moved, dropped or stored
-    private final boolean keepOnDeath;
     private final ClickType click;
     private final boolean glow;
     private final int customModelData;   // -1 = none
 
     private HotbarItem(String id, int slot, Material material, String name, List<String> lore, String command,
                        boolean asConsole, String permission, List<String> worlds, boolean whitelist,
-                       boolean locked, boolean keepOnDeath, ClickType click, boolean glow,
+                       boolean locked, ClickType click, boolean glow,
                        int customModelData) {
         this.id = id;
         this.slot = slot;
@@ -71,7 +73,6 @@ public final class HotbarItem {
         this.worlds = worlds;
         this.whitelist = whitelist;
         this.locked = locked;
-        this.keepOnDeath = keepOnDeath;
         this.click = click;
         this.glow = glow;
         this.customModelData = customModelData;
@@ -116,7 +117,6 @@ public final class HotbarItem {
                 sec.getStringList("worlds"),
                 "whitelist".equalsIgnoreCase(sec.getString("world-mode", "blacklist")),
                 sec.getBoolean("locked", true),
-                sec.getBoolean("keep-on-death", true),
                 ClickType.parse(sec.getString("click", "right"), logger, id),
                 sec.getBoolean("glow", false),
                 sec.getInt("custom-model-data", -1));
@@ -127,15 +127,15 @@ public final class HotbarItem {
      * Name and lore go through PlaceholderAPI (when installed), so they are as fresh as the last
      * apply — join, respawn, world change or reload.
      */
-    public ItemStack build(org.bukkit.NamespacedKey key, Player player) {
+    public ItemStack build(NamespacedKey key, Player player) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            meta.displayName(Text.item(com.mystipixel.royaljoin.util.Papi.apply(player, name)));
+            meta.displayName(Text.item(Papi.apply(player, name)));
             if (!lore.isEmpty()) {
-                List<net.kyori.adventure.text.Component> lines = new ArrayList<>(lore.size());
+                List<Component> lines = new ArrayList<>(lore.size());
                 for (String line : lore) {
-                    lines.add(Text.item(com.mystipixel.royaljoin.util.Papi.apply(player, line)));
+                    lines.add(Text.item(Papi.apply(player, line)));
                 }
                 meta.lore(lines);
             }
@@ -171,6 +171,5 @@ public final class HotbarItem {
     public String command() { return command; }
     public boolean asConsole() { return asConsole; }
     public boolean locked() { return locked; }
-    public boolean keepOnDeath() { return keepOnDeath; }
     public ClickType click() { return click; }
 }

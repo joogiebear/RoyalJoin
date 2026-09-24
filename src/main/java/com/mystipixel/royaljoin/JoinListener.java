@@ -1,5 +1,6 @@
 package com.mystipixel.royaljoin;
 
+import com.mystipixel.royaljoin.util.Papi;
 import com.mystipixel.royaljoin.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -10,12 +11,16 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Iterator;
@@ -37,31 +42,24 @@ public final class JoinListener implements Listener {
         this.items = items;
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         // A tick later: plugins that restore or clear inventories on join run at their own priorities,
         // and applying before them would just be overwritten.
-        Player player = event.getPlayer();
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (player.isOnline()) {
-                items.apply(player);
-            }
-        });
+        reapplyNextTick(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
-        Player player = event.getPlayer();
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (player.isOnline()) {
-                items.apply(player);
-            }
-        });
+        reapplyNextTick(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
-        Player player = event.getPlayer();
+        reapplyNextTick(event.getPlayer());
+    }
+
+    private void reapplyNextTick(Player player) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (player.isOnline()) {
                 items.apply(player);
@@ -70,28 +68,23 @@ public final class JoinListener implements Listener {
     }
 
     /**
-     * Drop our items from the death drops when they're set to survive death.
+     * Take our items out of the death drops. Respawn hands out fresh copies, so a copy left in the drops
+     * would be a second one lying on the ground for anyone to pick up and click.
      *
-     * <p>Removing rather than re-adding on respawn: if the item stayed in the drops it would also be
-     * lying on the ground, so a player could end up with two.
+     * <p>LOWEST, so it runs before grave and death-chest plugins collect the drops and store a copy.
      */
-    @EventHandler(priority = EventPriority.NORMAL)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onDeath(PlayerDeathEvent event) {
         Iterator<ItemStack> it = event.getDrops().iterator();
         while (it.hasNext()) {
-            String id = items.idOf(it.next());
-            if (id == null) {
-                continue;
-            }
-            HotbarItem item = plugin.item(event.getEntity().getWorld(), id);
-            if (item == null || item.keepOnDeath()) {
+            if (items.isOurs(it.next())) {
                 it.remove();
             }
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+    public void onQuit(PlayerQuitEvent event) {
         plugin.cooldowns().forget(event.getPlayer());   // keep the tracker bounded
     }
 
@@ -136,6 +129,26 @@ public final class JoinListener implements Listener {
     }
 
     /**
+     * Right-clicking an entity doesn't fire PlayerInteractEvent, so without this a locked item could be
+     * put in an item frame or handed to an allay, and then taken by anyone.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onInteractEntity(PlayerInteractEntityEvent event) {
+        Player player = event.getPlayer();
+        if (locked(player, player.getInventory().getItem(event.getHand()))) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** Armor stands have their own event for taking an item from a player's hand. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onArmorStand(PlayerArmorStandManipulateEvent event) {
+        if (locked(event.getPlayer(), event.getPlayerItem())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
      * Whether a stack is one of ours and pinned in place. Resolved against the player's world, since a
      * world file can define the same id with different behaviour.
      */
@@ -160,7 +173,7 @@ public final class JoinListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInteract(PlayerInteractEvent event) {
         // The event fires once per hand; without this the command would run twice per click.
-        if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) {
+        if (event.getHand() != EquipmentSlot.HAND) {
             return;
         }
         String id = items.idOf(event.getItem());
@@ -171,8 +184,13 @@ public final class JoinListener implements Listener {
             plugin.getLogger().info("[debug] " + event.getPlayer().getName() + " " + event.getAction()
                     + " with '" + id + "' (cancelled=" + event.isCancelled() + ")");
         }
-        HotbarItem item = plugin.item(event.getPlayer().getWorld(), id);
+        Player player = event.getPlayer();
+        HotbarItem item = plugin.item(player.getWorld(), id);
         if (item == null) {
+            // Ours, but nothing by that id applies here any more (removed from config, or a world that
+            // doesn't inherit it). Don't let it place or break anything; swap it for what should be here.
+            event.setCancelled(true);
+            reapplyNextTick(player);
             return;
         }
         boolean right = event.getAction().isRightClick();
@@ -190,7 +208,18 @@ public final class JoinListener implements Listener {
             return;
         }
         event.setCancelled(true);
-        Player player = event.getPlayer();
+
+        // Permission and world are checked again at the click, not only when the item is handed out: a
+        // player who has just lost the permission (an expired rank, say) still holds the item until the
+        // next apply, and it must not keep working for them — least of all an as-console one.
+        if (!item.appliesTo(player)) {
+            if (plugin.debug()) {
+                plugin.getLogger().info("[debug] " + player.getName() + " no longer qualifies for '" + id
+                        + "'; taking it back.");
+            }
+            reapplyNextTick(player);
+            return;
+        }
 
         CooldownTracker.Result gate = plugin.cooldowns().check(player);
         if (gate != CooldownTracker.Result.ALLOW) {
@@ -209,7 +238,7 @@ public final class JoinListener implements Listener {
             return;
         }
 
-        String command = com.mystipixel.royaljoin.util.Papi.apply(player,
+        String command = Papi.apply(player,
                 item.command().replace("%player%", player.getName()));
         boolean handled;
         if (item.asConsole()) {

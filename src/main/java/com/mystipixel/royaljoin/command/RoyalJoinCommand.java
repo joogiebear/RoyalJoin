@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.Locale;
 
 /** {@code /royaljoin reload} — re-read the config and re-apply items to everyone online. */
 public final class RoyalJoinCommand implements CommandExecutor, TabCompleter {
@@ -45,7 +46,7 @@ public final class RoyalJoinCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String alias, String[] args) {
-        if (args.length == 1 && sender.hasPermission("royaljoin.admin") && "reload".startsWith(args[0].toLowerCase())) {
+        if (args.length == 1 && sender.hasPermission("royaljoin.admin") && "reload".startsWith(args[0].toLowerCase(Locale.ROOT))) {
             return List.of("reload");
         }
         return List.of();
