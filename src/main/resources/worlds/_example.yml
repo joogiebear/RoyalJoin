@@ -30,4 +30,3 @@ items:
     command: "farmmenu"
     click: right
     locked: true
-    keep-on-death: true

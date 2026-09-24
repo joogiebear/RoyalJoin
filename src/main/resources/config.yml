@@ -40,12 +40,15 @@ items:
 
     # false - run as the player (respects their permissions)
     # true  - run from console (for commands players may not have access to)
+    # With true, avoid placeholders whose value players control (nicknames, display
+    # names): their text would become part of a command run with full console rights.
     as-console: false
 
     # Which click opens it: right, left, or either.
     click: right
 
-    # Leave empty to give it to everyone, or require a permission node.
+    # Leave empty to give it to everyone, or require a permission node. Checked
+    # again at every click, so a player who loses it can't keep using the item.
     permission: ""
 
     # Narrow this one item to certain worlds without giving them their own file.
@@ -55,11 +58,10 @@ items:
     worlds: []
     world-mode: blacklist
 
-    # true - can't be moved, dropped, stored in a chest or swapped to the off-hand.
+    # true - can't be moved, dropped, stored in a chest, swapped to the off-hand,
+    #        or put in an item frame or on an armor stand.
+    # These items never drop on death either way; respawning hands out a fresh one.
     locked: true
-
-    # true - kept through death instead of dropping with everything else.
-    keep-on-death: true
 
     # Adds the enchantment shimmer without an enchantment.
     glow: false

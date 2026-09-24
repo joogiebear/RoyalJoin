@@ -7,7 +7,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Puts configured items where they belong, and recognises them again afterwards. */
@@ -47,7 +47,8 @@ public final class ItemService {
      */
     public void apply(Player player) {
         Inventory inv = player.getInventory();
-        Map<String, HotbarItem> wanted = new HashMap<>();
+        // Config order, so when two items share a slot the outcome is the same every time.
+        Map<String, HotbarItem> wanted = new LinkedHashMap<>();
         for (HotbarItem item : plugin.itemsFor(player.getWorld())) {
             if (item.appliesTo(player)) {
                 wanted.put(item.id(), item);

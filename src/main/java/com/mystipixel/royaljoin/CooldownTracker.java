@@ -2,6 +2,8 @@ package com.mystipixel.royaljoin;
 
 import org.bukkit.entity.Player;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -12,6 +14,9 @@ import java.util.UUID;
  * <p>A short gap between uses stops a menu re-opening on every frame of a held click. On top of that,
  * a burst of activations inside a short window trips a lockout — the pattern an auto-clicker produces,
  * which a simple per-use delay would happily serve forever at exactly the delay interval.
+ *
+ * <p>The burst window slides: it always covers the last {@code spamWindowMillis}, so a burst can't
+ * dodge the guard by straddling the boundary of a fixed window.
  *
  * <p>Main-thread only: clicks arrive on the server thread, so no locking. State is dropped when a
  * player leaves so the map can't grow without bound.
@@ -31,9 +36,9 @@ public final class CooldownTracker {
     }
 
     private static final class State {
-        long lastUse;
-        long windowStart;
-        int usesInWindow;
+        long lastUse = Long.MIN_VALUE;
+        /** Times of recent activations, oldest first, never older than the spam window. */
+        final Deque<Long> recent = new ArrayDeque<>();
         long lockedUntil;
     }
 
@@ -53,28 +58,29 @@ public final class CooldownTracker {
 
     /** Test and record a click. Call once per activation attempt. */
     public Result check(Player player) {
-        long now = System.currentTimeMillis();
-        State state = states.computeIfAbsent(player.getUniqueId(), id -> new State());
+        return check(player.getUniqueId(), System.currentTimeMillis());
+    }
+
+    Result check(UUID id, long now) {
+        State state = states.computeIfAbsent(id, key -> new State());
 
         if (now < state.lockedUntil) {
             return Result.STILL_LOCKED_OUT;
         }
-        if (betweenUsesMillis > 0 && now - state.lastUse < betweenUsesMillis) {
+        if (betweenUsesMillis > 0 && state.lastUse != Long.MIN_VALUE && now - state.lastUse < betweenUsesMillis) {
             return Result.TOO_SOON;
         }
-
-        // Roll the window forward once it has elapsed, so ordinary use never accumulates toward a lockout.
-        if (now - state.windowStart > spamWindowMillis) {
-            state.windowStart = now;
-            state.usesInWindow = 0;
-        }
-        state.usesInWindow++;
         state.lastUse = now;
 
-        if (spamThreshold > 0 && state.usesInWindow >= spamThreshold) {
+        // Forget activations that have slid out of the window, so ordinary use never accumulates.
+        while (!state.recent.isEmpty() && now - state.recent.peekFirst() >= spamWindowMillis) {
+            state.recent.pollFirst();
+        }
+        state.recent.addLast(now);
+
+        if (spamThreshold > 0 && state.recent.size() >= spamThreshold) {
             state.lockedUntil = now + lockoutMillis;
-            state.usesInWindow = 0;
-            state.windowStart = now;
+            state.recent.clear();
             return Result.LOCKED_OUT_NOW;
         }
         return Result.ALLOW;
@@ -82,11 +88,15 @@ public final class CooldownTracker {
 
     /** Seconds left on a player's lockout, for the message. */
     public long secondsRemaining(Player player) {
-        State state = states.get(player.getUniqueId());
+        return secondsRemaining(player.getUniqueId(), System.currentTimeMillis());
+    }
+
+    long secondsRemaining(UUID id, long now) {
+        State state = states.get(id);
         if (state == null) {
             return 0;
         }
-        return Math.max(0, (state.lockedUntil - System.currentTimeMillis() + 999) / 1000);
+        return Math.max(0, (state.lockedUntil - now + 999) / 1000);
     }
 
     public void forget(Player player) {

@@ -14,9 +14,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.util.Locale;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Pins configured items to hotbar slots and runs a command when they're clicked.
@@ -110,6 +112,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         inheritsDefault.clear();
 
         readItems(getConfig().getConfigurationSection("items"), defaults, "config.yml");
+        warnSlotClashes(new ArrayList<>(defaults.values()), defaults.keySet(), "config.yml");
         if (defaults.isEmpty()) {
             getLogger().warning("No usable items in config.yml — only worlds with their own file will"
                     + " get anything.");
@@ -143,6 +146,9 @@ public final class RoyalJoinPlugin extends JavaPlugin {
             perWorld.put(world, loaded);
             inheritsDefault.put(world, cfg.getBoolean("inherit-default", false));
         }
+        for (String world : perWorld.keySet()) {
+            warnSlotClashes(itemsForKey(world), perWorld.get(world).keySet(), "worlds/" + world + ".yml");
+        }
         if (!perWorld.isEmpty()) {
             getLogger().info("Per-world items: " + String.join(", ", perWorld.keySet()) + ".");
         }
@@ -171,7 +177,10 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         if (world == null) {
             return new ArrayList<>(defaults.values());
         }
-        String key = world.getName().toLowerCase(Locale.ROOT);
+        return itemsForKey(world.getName().toLowerCase(Locale.ROOT));
+    }
+
+    private List<HotbarItem> itemsForKey(String key) {
         Map<String, HotbarItem> specific = perWorld.get(key);
         if (specific == null) {
             return new ArrayList<>(defaults.values());
@@ -185,12 +194,38 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         return new ArrayList<>(merged.values());
     }
 
-    /** Look up an item by id for the world a player is in, so per-world overrides win. */
+    /**
+     * Two items in one slot can't both sit there: the later one pushes the earlier somewhere else in the
+     * inventory. Almost always a config mistake, so say so rather than leave it to be discovered in game.
+     * Items limited by permission or world may never actually meet, which is why this only warns.
+     */
+    private void warnSlotClashes(List<HotbarItem> items, Set<String> ownIds, String source) {
+        Map<Integer, String> bySlot = new HashMap<>();
+        for (HotbarItem item : items) {
+            String earlier = bySlot.putIfAbsent(item.slot(), item.id());
+            // Only report clashes this file is part of; config.yml's own are reported once, for config.yml.
+            if (earlier != null && (ownIds.contains(earlier) || ownIds.contains(item.id()))) {
+                getLogger().warning("Items '" + earlier + "' and '" + item.id() + "' (" + source + ") are both"
+                        + " in slot " + (item.slot() + 1) + "; '" + item.id() + "' will push '" + earlier
+                        + "' elsewhere in the inventory. Give one a different slot unless their permissions or"
+                        + " worlds keep them apart.");
+            }
+        }
+    }
+
+    /**
+     * Look up an item by id for the world a player is in, so per-world overrides win. Agrees with
+     * {@link #itemsFor}: a world whose file doesn't inherit the defaults doesn't see them here either.
+     */
     public HotbarItem item(World world, String id) {
         if (world != null) {
-            Map<String, HotbarItem> specific = perWorld.get(world.getName().toLowerCase(Locale.ROOT));
-            if (specific != null && specific.containsKey(id)) {
-                return specific.get(id);
+            String key = world.getName().toLowerCase(Locale.ROOT);
+            Map<String, HotbarItem> specific = perWorld.get(key);
+            if (specific != null) {
+                HotbarItem own = specific.get(id);
+                if (own != null || !inheritsDefault.getOrDefault(key, false)) {
+                    return own;
+                }
             }
         }
         return defaults.get(id);
