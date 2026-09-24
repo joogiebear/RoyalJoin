@@ -3,6 +3,8 @@ package com.mystipixel.royaljoin;
 import com.mystipixel.royaljoin.util.Papi;
 import com.mystipixel.royaljoin.util.Text;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Allay;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -130,10 +132,14 @@ public final class JoinListener implements Listener {
 
     /**
      * Right-clicking an entity doesn't fire PlayerInteractEvent, so without this a locked item could be
-     * put in an item frame or handed to an allay, and then taken by anyone.
+     * put in an item frame or handed to an allay, and then taken by anyone. Only those two are
+     * blocked: a hub's selector is usually in hand, and villagers, mounts and NPCs must stay usable.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
+        if (!(event.getRightClicked() instanceof ItemFrame) && !(event.getRightClicked() instanceof Allay)) {
+            return;
+        }
         Player player = event.getPlayer();
         if (locked(player, player.getInventory().getItem(event.getHand()))) {
             event.setCancelled(true);
