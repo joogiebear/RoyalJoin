@@ -6,12 +6,14 @@ import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collections;
 
 /**
  * Pins configured items to hotbar slots and runs a command when they're clicked.
@@ -32,11 +35,17 @@ public final class RoyalJoinPlugin extends JavaPlugin {
     private static final int BSTATS_PLUGIN_ID = 33888;
 
     /** Items from config.yml — the catch-all, used by any world without a file of its own. */
-    private final Map<String, HotbarItem> defaults = new LinkedHashMap<>();
-    /** world name (lowercase) → that world's items, from worlds/<world>.yml. */
-    private final Map<String, Map<String, HotbarItem>> perWorld = new LinkedHashMap<>();
-    /** world name (lowercase) → whether its file adds to the config.yml items rather than replacing them. */
-    private final Map<String, Boolean> inheritsDefault = new LinkedHashMap<>();
+    record ActiveConfig(Map<String, HotbarItem> defaults,
+                                Map<String, Map<String, HotbarItem>> perWorld,
+                                Map<String, Boolean> inheritsDefault,
+                                long betweenUsesMillis, int spamThreshold,
+                                long spamWindowMillis, long lockoutSeconds,
+                                String cooldownMessage, boolean debug) {}
+
+    public record ReloadResult(boolean success, String error) {}
+
+    private ActiveConfig active = new ActiveConfig(Map.of(), Map.of(), Map.of(),
+            400, 6, 3000, 5, "", false);
     private ItemService itemService;
     private final CooldownTracker cooldowns = new CooldownTracker();
 
@@ -44,7 +53,10 @@ public final class RoyalJoinPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         this.itemService = new ItemService(this);
-        reloadItems();
+        ReloadResult initial = reloadItems();
+        if (!initial.success()) {
+            getLogger().severe("RoyalJoin configuration was not activated: " + initial.error());
+        }
 
         getServer().getPluginManager().registerEvents(new JoinListener(this, itemService), this);
 
@@ -75,7 +87,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         // Whether the worlds/ folder is being used at all — the per-world override is the part of
         // this plugin most likely to be dead weight, so it is worth knowing if anyone reaches for it.
         metrics.addCustomChart(new SimplePie("per_world_items",
-                () -> String.valueOf(!perWorld.isEmpty())));
+                () -> String.valueOf(!active.perWorld().isEmpty())));
         metrics.addCustomChart(new SimplePie("placeholderapi",
                 () -> String.valueOf(Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))));
     }
@@ -97,106 +109,144 @@ public final class RoyalJoinPlugin extends JavaPlugin {
      * <p>config.yml holds the items that apply everywhere — the catch-all. A world only needs a file in
      * worlds/ when it wants something different, so a server with one setup never touches that folder.
      *
-     * <p>Invalid entries are skipped with a reason rather than being fatal.
+     * <p>The complete candidate is validated before it replaces the live configuration.
      */
-    public void reloadItems() {
-        reloadConfig();
-        cooldowns.configure(
-                getConfig().getLong("cooldown.between-uses-ms", 400),
-                getConfig().getInt("cooldown.spam-threshold", 6),
-                getConfig().getLong("cooldown.spam-window-ms", 3000),
-                getConfig().getLong("cooldown.lockout-seconds", 5));
-
-        defaults.clear();
-        perWorld.clear();
-        inheritsDefault.clear();
-
-        readItems(getConfig().getConfigurationSection("items"), defaults, "config.yml");
-        warnSlotClashes(new ArrayList<>(defaults.values()), defaults.keySet(), "config.yml");
-        if (defaults.isEmpty()) {
-            getLogger().warning("No usable items in config.yml — only worlds with their own file will"
-                    + " get anything.");
+    public ReloadResult reloadItems() {
+        try {
+            ActiveConfig candidate = loadCandidate(getDataFolder());
+            active = candidate;
+            cooldowns.configure(candidate.betweenUsesMillis(), candidate.spamThreshold(),
+                    candidate.spamWindowMillis(), candidate.lockoutSeconds());
+            ensureWorldFolder();
+            warnSlotClashes(new ArrayList<>(candidate.defaults().values()), candidate.defaults().keySet(),
+                    "config.yml");
+            for (String world : candidate.perWorld().keySet()) {
+                warnSlotClashes(itemsForKey(candidate, world), candidate.perWorld().get(world).keySet(),
+                        "worlds/" + world + ".yml");
+            }
+            return new ReloadResult(true, null);
+        } catch (ConfigException e) {
+            getLogger().warning("Reload rejected; keeping the last-good configuration: " + e.getMessage());
+            return new ReloadResult(false, e.getMessage());
         }
-        loadWorldFiles();
     }
 
-    /** Load worlds/<world>.yml. Files starting with _ are examples and skipped. */
-    private void loadWorldFiles() {
+    static ActiveConfig loadCandidate(File dataFolder) throws ConfigException {
+        FileConfiguration main = loadYaml(new File(dataFolder, "config.yml"), "config.yml");
+        Map<String, HotbarItem> defaults = new LinkedHashMap<>();
+        Map<String, Map<String, HotbarItem>> perWorld = new LinkedHashMap<>();
+        Map<String, Boolean> inheritsDefault = new LinkedHashMap<>();
+        readItems(itemsSection(main, "config.yml"), defaults, "config.yml");
+
+        long betweenUses = nonNegativeLong(main, "cooldown.between-uses-ms", 400, "config.yml");
+        int spamThreshold = nonNegativeInt(main, "cooldown.spam-threshold", 6, "config.yml");
+        long spamWindow = positiveLong(main, "cooldown.spam-window-ms", 3000, "config.yml");
+        long lockout = nonNegativeLong(main, "cooldown.lockout-seconds", 5, "config.yml");
+        if (lockout > Long.MAX_VALUE / 1000L) {
+            throw new ConfigException("config.yml: cooldown.lockout-seconds is too large");
+        }
+
+        File folder = new File(dataFolder, "worlds");
+        if (folder.isDirectory()) {
+            File[] files = folder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+            if (files == null) {
+                throw new ConfigException("worlds/: could not list configuration files");
+            }
+            java.util.Arrays.sort(files, java.util.Comparator.comparing(File::getName));
+            for (File file : files) {
+                String fileName = file.getName();
+                if (fileName.startsWith("_")) continue;
+                String world = fileName.substring(0, fileName.length() - 4).toLowerCase(Locale.ROOT);
+                if (perWorld.containsKey(world)) {
+                    throw new ConfigException("worlds/" + fileName + ": duplicates world '" + world + "'");
+                }
+                FileConfiguration cfg = loadYaml(file, "worlds/" + fileName);
+                Map<String, HotbarItem> loaded = new LinkedHashMap<>();
+                readItems(itemsSection(cfg, "worlds/" + fileName), loaded, "worlds/" + fileName);
+                perWorld.put(world, immutableOrdered(loaded));
+                inheritsDefault.put(world, booleanValue(cfg, "inherit-default", false,
+                        "worlds/" + fileName));
+            }
+        }
+        return new ActiveConfig(immutableOrdered(defaults), immutableOrdered(perWorld),
+                immutableOrdered(inheritsDefault),
+                betweenUses, spamThreshold, spamWindow, lockout,
+                stringValue(main, "cooldown.message", "", "config.yml"),
+                booleanValue(main, "settings.debug", false, "config.yml"));
+    }
+
+    private void ensureWorldFolder() {
         File folder = new File(getDataFolder(), "worlds");
-        if (!folder.isDirectory()) {
-            if (!folder.mkdirs()) {
-                return;
-            }
+        if (!folder.isDirectory() && folder.mkdirs()) {
             saveResource("worlds/_example.yml", false);
-            return;
-        }
-        File[] files = folder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
-        if (files == null) {
-            return;
-        }
-        for (File file : files) {
-            String fileName = file.getName();
-            if (fileName.startsWith("_")) {
-                continue;
-            }
-            String world = fileName.substring(0, fileName.length() - 4).toLowerCase(Locale.ROOT);
-            FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
-            Map<String, HotbarItem> loaded = new LinkedHashMap<>();
-            readItems(cfg.getConfigurationSection("items"), loaded, "worlds/" + fileName);
-            perWorld.put(world, loaded);
-            inheritsDefault.put(world, cfg.getBoolean("inherit-default", false));
-        }
-        for (String world : perWorld.keySet()) {
-            warnSlotClashes(itemsForKey(world), perWorld.get(world).keySet(), "worlds/" + world + ".yml");
-        }
-        if (!perWorld.isEmpty()) {
-            getLogger().info("Per-world items: " + String.join(", ", perWorld.keySet()) + ".");
         }
     }
 
-    private void readItems(ConfigurationSection section, Map<String, HotbarItem> into, String source) {
+    private static ConfigurationSection itemsSection(ConfigurationSection cfg, String source)
+            throws ConfigException {
+        if (!cfg.contains("items")) return null;
+        ConfigurationSection section = cfg.getConfigurationSection("items");
+        if (section == null) throw new ConfigException(source + ": items must be a section");
+        return section;
+    }
+
+    private static <K, V> Map<K, V> immutableOrdered(Map<K, V> source) {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(source));
+    }
+
+    private static FileConfiguration loadYaml(File file, String source) throws ConfigException {
+        YamlConfiguration cfg = new YamlConfiguration();
+        try {
+            cfg.load(file);
+            return cfg;
+        } catch (IOException | InvalidConfigurationException e) {
+            throw new ConfigException(source + ": " + e.getMessage(), e);
+        }
+    }
+
+    private static void readItems(ConfigurationSection section, Map<String, HotbarItem> into, String source)
+            throws ConfigException {
         if (section == null) {
             return;
         }
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
-                continue;
+                throw new ConfigException(source + ": item '" + id + "' must be a section");
             }
-            HotbarItem item = HotbarItem.load(id, entry, getLogger());
-            if (item == null) {
-                getLogger().warning("  (skipped item '" + id + "' from " + source + ")");
-                continue;
+            try {
+                into.put(id, HotbarItem.load(id, entry));
+            } catch (ConfigException e) {
+                throw new ConfigException(source + ": " + e.getMessage(), e);
             }
-            into.put(id, item);
         }
     }
 
     /** The items a world should show: its own file if it has one, otherwise the defaults. */
     public List<HotbarItem> itemsFor(World world) {
         if (world == null) {
-            return new ArrayList<>(defaults.values());
+            return new ArrayList<>(active.defaults().values());
         }
-        return itemsForKey(world.getName().toLowerCase(Locale.ROOT));
+        return itemsForKey(active, world.getName().toLowerCase(Locale.ROOT));
     }
 
-    private List<HotbarItem> itemsForKey(String key) {
-        Map<String, HotbarItem> specific = perWorld.get(key);
+    private List<HotbarItem> itemsForKey(ActiveConfig config, String key) {
+        Map<String, HotbarItem> specific = config.perWorld().get(key);
         if (specific == null) {
-            return new ArrayList<>(defaults.values());
+            return new ArrayList<>(config.defaults().values());
         }
-        if (!inheritsDefault.getOrDefault(key, false)) {
+        if (!config.inheritsDefault().getOrDefault(key, false)) {
             return new ArrayList<>(specific.values());
         }
         // inherit-default: the world's own entries win where ids collide.
-        Map<String, HotbarItem> merged = new LinkedHashMap<>(defaults);
+        Map<String, HotbarItem> merged = new LinkedHashMap<>(config.defaults());
         merged.putAll(specific);
         return new ArrayList<>(merged.values());
     }
 
     /**
-     * Two items in one slot can't both sit there: the later one pushes the earlier somewhere else in the
-     * inventory. Almost always a config mistake, so say so rather than leave it to be discovered in game.
+     * Two effective items in one slot cannot both be installed. Almost always a config mistake, so warn
+     * at load time as well as rejecting the conflicting effective set atomically at apply time.
      * Items limited by permission or world may never actually meet, which is why this only warns.
      */
     private void warnSlotClashes(List<HotbarItem> items, Set<String> ownIds, String source) {
@@ -206,8 +256,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
             // Only report clashes this file is part of; config.yml's own are reported once, for config.yml.
             if (earlier != null && (ownIds.contains(earlier) || ownIds.contains(item.id()))) {
                 getLogger().warning("Items '" + earlier + "' and '" + item.id() + "' (" + source + ") are both"
-                        + " in slot " + (item.slot() + 1) + "; '" + item.id() + "' will push '" + earlier
-                        + "' elsewhere in the inventory. Give one a different slot unless their permissions or"
+                        + " in slot " + (item.slot() + 1) + ". Give one a different slot unless their permissions or"
                         + " worlds keep them apart.");
             }
         }
@@ -220,25 +269,85 @@ public final class RoyalJoinPlugin extends JavaPlugin {
     public HotbarItem item(World world, String id) {
         if (world != null) {
             String key = world.getName().toLowerCase(Locale.ROOT);
-            Map<String, HotbarItem> specific = perWorld.get(key);
+            Map<String, HotbarItem> specific = active.perWorld().get(key);
             if (specific != null) {
                 HotbarItem own = specific.get(id);
-                if (own != null || !inheritsDefault.getOrDefault(key, false)) {
+                if (own != null || !active.inheritsDefault().getOrDefault(key, false)) {
                     return own;
                 }
             }
         }
-        return defaults.get(id);
+        return active.defaults().get(id);
     }
 
     /** Every item defined anywhere, for the reload summary. */
     public int itemCount() {
-        return defaults.size() + perWorld.values().stream().mapToInt(Map::size).sum();
+        return active.defaults().size() + active.perWorld().values().stream().mapToInt(Map::size).sum();
     }
 
     /** Extra console output while working out why a click isn't doing what you expect. */
     public boolean debug() {
-        return getConfig().getBoolean("settings.debug", false);
+        return active.debug();
+    }
+
+    public String cooldownMessage() { return active.cooldownMessage(); }
+
+    private static long nonNegativeLong(ConfigurationSection cfg, String path, long fallback, String source)
+            throws ConfigException {
+        long value = longValue(cfg, path, fallback, source);
+        if (value < 0) throw new ConfigException(source + ": " + path + " must be non-negative");
+        return value;
+    }
+
+    private static long positiveLong(ConfigurationSection cfg, String path, long fallback, String source)
+            throws ConfigException {
+        long value = longValue(cfg, path, fallback, source);
+        if (value < 1) throw new ConfigException(source + ": " + path + " must be at least 1");
+        return value;
+    }
+
+    private static int nonNegativeInt(ConfigurationSection cfg, String path, int fallback, String source)
+            throws ConfigException {
+        long value = longValue(cfg, path, fallback, source);
+        if (value < 0 || value > Integer.MAX_VALUE) {
+            throw new ConfigException(source + ": " + path + " must be between 0 and " + Integer.MAX_VALUE);
+        }
+        return (int) value;
+    }
+
+    private static long longValue(ConfigurationSection cfg, String path, long fallback, String source)
+            throws ConfigException {
+        if (!cfg.contains(path)) return fallback;
+        Object raw = cfg.get(path);
+        if (!(raw instanceof Number number)) {
+            throw new ConfigException(source + ": " + path + " must be an integer");
+        }
+        double decimal = number.doubleValue();
+        long value = number.longValue();
+        if (!Double.isFinite(decimal) || decimal != value) {
+            throw new ConfigException(source + ": " + path + " must be an integer");
+        }
+        return value;
+    }
+
+    private static boolean booleanValue(ConfigurationSection cfg, String path, boolean fallback, String source)
+            throws ConfigException {
+        if (!cfg.contains(path)) return fallback;
+        Object raw = cfg.get(path);
+        if (!(raw instanceof Boolean value)) {
+            throw new ConfigException(source + ": " + path + " must be true or false");
+        }
+        return value;
+    }
+
+    private static String stringValue(ConfigurationSection cfg, String path, String fallback, String source)
+            throws ConfigException {
+        if (!cfg.contains(path)) return fallback;
+        Object raw = cfg.get(path);
+        if (!(raw instanceof String value)) {
+            throw new ConfigException(source + ": " + path + " must be text");
+        }
+        return value;
     }
 
     public CooldownTracker cooldowns() {

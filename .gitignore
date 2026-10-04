@@ -1,4 +1,6 @@
 target/
+qa/player-harness/.tools/
+qa/player-harness/.runtime/
 *.class
 *.jar
 .idea/

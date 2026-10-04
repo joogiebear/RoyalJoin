@@ -15,7 +15,6 @@ import org.bukkit.persistence.PersistentDataType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.logging.Logger;
 
 /**
  * One configured hotbar item: what it looks like, where it sits, and what clicking it does.
@@ -29,16 +28,15 @@ public final class HotbarItem {
     public enum ClickType {
         RIGHT, LEFT, EITHER;
 
-        static ClickType parse(String raw, Logger logger, String id) {
+        static ClickType parse(String raw, String id) throws ConfigException {
             if (raw == null || raw.isBlank()) {
                 return RIGHT;
             }
             try {
                 return valueOf(raw.trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
-                logger.warning("Item '" + id + "' has click: " + raw + ", which isn't right/left/either."
-                        + " Using right.");
-                return RIGHT;
+                throw new ConfigException("item '" + id + "': click '" + raw
+                        + "' must be right, left, or either");
             }
         }
     }
@@ -79,47 +77,39 @@ public final class HotbarItem {
     }
 
     /**
-     * Read one item from its config section. Returns null and explains why if the section can't produce a
-     * usable item, so one bad entry doesn't stop the rest loading.
+     * Read and validate one item from its config section.
      */
-    public static HotbarItem load(String id, ConfigurationSection sec, Logger logger) {
-        String rawMaterial = sec.getString("material", "NETHER_STAR");
+    public static HotbarItem load(String id, ConfigurationSection sec) throws ConfigException {
+        String rawMaterial = stringValue(sec, "material", "NETHER_STAR", id);
         Material material = Material.matchMaterial(rawMaterial);
         if (material == null || !material.isItem()) {
-            logger.warning("Item '" + id + "' has material: " + rawMaterial + ", which isn't a valid item."
-                    + " Skipping it.");
-            return null;
+            throw new ConfigException("item '" + id + "': material '" + rawMaterial + "' is not a valid item");
         }
 
         // Config counts hotbar slots 1-9 left to right; the inventory indexes them 0-8.
-        int configured = sec.getInt("slot", 9);
+        int configured = intValue(sec, "slot", 9, id);
         if (configured < 1 || configured > 9) {
-            logger.warning("Item '" + id + "' has slot: " + configured + ", outside the hotbar (1-9)."
-                    + " Using slot 9.");
-            configured = 9;
+            throw new ConfigException("item '" + id + "': slot " + configured + " is outside 1-9");
         }
 
-        String command = sec.getString("command", "");
-        if (command.isBlank()) {
-            logger.warning("Item '" + id + "' has no command, so clicking it would do nothing. Skipping it.");
-            return null;
-        }
+        String command = normalizeCommand(stringValue(sec, "command", "", id), id);
+        String rawWorldMode = normalizeWorldMode(stringValue(sec, "world-mode", "blacklist", id), id);
 
         return new HotbarItem(
                 id,
                 configured - 1,
                 material,
-                sec.getString("name", "&f" + id),
-                sec.getStringList("lore"),
-                command.startsWith("/") ? command.substring(1) : command,
-                sec.getBoolean("as-console", false),
-                sec.getString("permission", ""),
-                sec.getStringList("worlds"),
-                "whitelist".equalsIgnoreCase(sec.getString("world-mode", "blacklist")),
-                sec.getBoolean("locked", true),
-                ClickType.parse(sec.getString("click", "right"), logger, id),
-                sec.getBoolean("glow", false),
-                sec.getInt("custom-model-data", -1));
+                stringValue(sec, "name", "&f" + id, id),
+                stringList(sec, "lore", id),
+                command,
+                booleanValue(sec, "as-console", false, id),
+                stringValue(sec, "permission", "", id),
+                stringList(sec, "worlds", id),
+                rawWorldMode.equals("whitelist"),
+                booleanValue(sec, "locked", true, id),
+                ClickType.parse(stringValue(sec, "click", "right", id), id),
+                booleanValue(sec, "glow", false, id),
+                intValue(sec, "custom-model-data", -1, id));
     }
 
     /**
@@ -172,4 +162,63 @@ public final class HotbarItem {
     public boolean asConsole() { return asConsole; }
     public boolean locked() { return locked; }
     public ClickType click() { return click; }
+    boolean whitelist() { return whitelist; }
+
+    static String normalizeCommand(String raw, String id) throws ConfigException {
+        String command = raw == null ? "" : raw.trim();
+        if (command.startsWith("/")) command = command.substring(1).trim();
+        if (command.isBlank() || command.chars().allMatch(character -> character == '/')) {
+            throw new ConfigException("item '" + id + "': command is blank after normalization");
+        }
+        return command;
+    }
+
+    static String normalizeWorldMode(String raw, String id) throws ConfigException {
+        String mode = raw == null ? "blacklist" : raw.trim().toLowerCase(Locale.ROOT);
+        if (!mode.equals("whitelist") && !mode.equals("blacklist")) {
+            throw new ConfigException("item '" + id + "': world-mode '" + mode
+                    + "' must be whitelist or blacklist");
+        }
+        return mode;
+    }
+
+    private static String stringValue(ConfigurationSection sec, String path, String fallback, String id)
+            throws ConfigException {
+        if (!sec.contains(path)) return fallback;
+        Object raw = sec.get(path);
+        if (!(raw instanceof String value)) {
+            throw new ConfigException("item '" + id + "': " + path + " must be text");
+        }
+        return value;
+    }
+
+    private static int intValue(ConfigurationSection sec, String path, int fallback, String id)
+            throws ConfigException {
+        if (!sec.contains(path)) return fallback;
+        Object raw = sec.get(path);
+        if (!(raw instanceof Number number) || number.doubleValue() != number.intValue()) {
+            throw new ConfigException("item '" + id + "': " + path + " must be an integer");
+        }
+        return number.intValue();
+    }
+
+    private static boolean booleanValue(ConfigurationSection sec, String path, boolean fallback, String id)
+            throws ConfigException {
+        if (!sec.contains(path)) return fallback;
+        Object raw = sec.get(path);
+        if (!(raw instanceof Boolean value)) {
+            throw new ConfigException("item '" + id + "': " + path + " must be true or false");
+        }
+        return value;
+    }
+
+    private static List<String> stringList(ConfigurationSection sec, String path, String id)
+            throws ConfigException {
+        if (!sec.contains(path)) return List.of();
+        Object raw = sec.get(path);
+        if (!(raw instanceof List<?> values) || values.stream().anyMatch(value -> !(value instanceof String))) {
+            throw new ConfigException("item '" + id + "': " + path + " must be a list of text values");
+        }
+        return values.stream().map(String.class::cast).toList();
+    }
 }

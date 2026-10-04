@@ -232,7 +232,7 @@ public final class JoinListener implements Listener {
             // Only speak when the lockout trips. Messaging every blocked click would turn an
             // auto-clicker into chat spam, which is worse than the thing being prevented.
             if (gate == CooldownTracker.Result.LOCKED_OUT_NOW) {
-                String message = plugin.getConfig().getString("cooldown.message", "");
+                String message = plugin.cooldownMessage();
                 if (message != null && !message.isBlank()) {
                     player.sendMessage(Text.chat(message.replace("%seconds%",
                             String.valueOf(plugin.cooldowns().secondsRemaining(player)))));
