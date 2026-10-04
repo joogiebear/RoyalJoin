@@ -1,3 +1,9 @@
+## 2026.40.0 — 2026-10-03
+
+### 🐛 Fixes
+- inventory safety and atomic configuration reload (#5) (`b72ecd6`)
+- use the ISO week-year for release versions (`bea4383`)
+
 ## 2026.39.1 — 2026-09-24
 
 ### 🐛 Fixes
