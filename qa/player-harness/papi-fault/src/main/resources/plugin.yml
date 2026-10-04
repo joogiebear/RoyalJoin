@@ -1,0 +1,4 @@
+name: PlaceholderAPI
+version: 0.0.0-qa-fault
+main: me.clip.placeholderapi.FaultPlugin
+api-version: '26.2'

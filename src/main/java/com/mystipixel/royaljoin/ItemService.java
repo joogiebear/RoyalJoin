@@ -4,11 +4,17 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /** Puts configured items where they belong, and recognises them again afterwards. */
 public final class ItemService {
@@ -46,7 +52,7 @@ public final class ItemService {
      * respawn and world-change all able to call it without risking duplicates.
      */
     public void apply(Player player) {
-        Inventory inv = player.getInventory();
+        PlayerInventory inv = player.getInventory();
         // Config order, so when two items share a slot the outcome is the same every time.
         Map<String, HotbarItem> wanted = new LinkedHashMap<>();
         for (HotbarItem item : plugin.itemsFor(player.getWorld())) {
@@ -55,18 +61,79 @@ public final class ItemService {
             }
         }
 
-        // Clear out our items first, wherever they ended up, so a slot change in config doesn't leave the
-        // old copy behind and a player who lost access doesn't keep it.
-        for (int i = 0; i < inv.getSize(); i++) {
-            String id = idOf(inv.getItem(i));
-            if (id != null) {
-                inv.setItem(i, null);
+        Set<Integer> reserved = new HashSet<>();
+        Map<Integer, ItemStack> replacements = new LinkedHashMap<>();
+        for (HotbarItem item : wanted.values()) {
+            if (!reserved.add(item.slot())) {
+                plugin.getLogger().warning("Cannot refresh inventory for " + player.getName()
+                        + ": multiple effective RoyalJoin items target slot " + (item.slot() + 1) + ".");
+                return;
             }
+            replacements.put(item.slot(), item.build(key, player));
         }
 
-        for (HotbarItem item : wanted.values()) {
-            place(player, inv, item);
+        int storageSize = inv.getStorageContents().length;
+        ItemStack[] candidate = plan(inv.getContents(), storageSize, reserved, this::isOurs, replacements);
+        if (candidate == null) {
+            plugin.getLogger().fine("Inventory full for " + player.getName()
+                    + "; retaining their complete inventory rather than partially refreshing it.");
+            return;
         }
+        inv.setContents(candidate);
+    }
+
+    static ItemStack[] plan(ItemStack[] original, int storageSize, Set<Integer> reserved,
+                            Predicate<ItemStack> owned, Map<Integer, ItemStack> replacements) {
+        ItemStack[] candidate = cloneContents(original);
+        for (int i = 0; i < candidate.length; i++) {
+            if (owned.test(candidate[i])) candidate[i] = null;
+        }
+        List<ItemStack> displaced = new ArrayList<>();
+        for (int slot : reserved) {
+            ItemStack existing = candidate[slot];
+            if (existing != null && !existing.getType().isAir()) {
+                displaced.add(existing);
+            }
+            candidate[slot] = null;
+        }
+        for (ItemStack stack : displaced) {
+            if (!relocate(candidate, storageSize, reserved, stack)) {
+                return null;
+            }
+        }
+        replacements.forEach((slot, stack) -> candidate[slot] = stack.clone());
+        return candidate;
+    }
+
+    private static ItemStack[] cloneContents(ItemStack[] original) {
+        ItemStack[] copy = new ItemStack[original.length];
+        for (int i = 0; i < original.length; i++) {
+            copy[i] = original[i] == null ? null : original[i].clone();
+        }
+        return copy;
+    }
+
+    static boolean relocate(ItemStack[] contents, int storageSize, Set<Integer> reserved, ItemStack original) {
+        ItemStack remaining = original.clone();
+        for (int i = 0; i < storageSize && remaining.getAmount() > 0; i++) {
+            ItemStack present = contents[i];
+            if (reserved.contains(i) || present == null || !present.isSimilar(remaining)) {
+                continue;
+            }
+            int room = present.getMaxStackSize() - present.getAmount();
+            if (room > 0) {
+                int moved = Math.min(room, remaining.getAmount());
+                present.setAmount(present.getAmount() + moved);
+                remaining.setAmount(remaining.getAmount() - moved);
+            }
+        }
+        for (int i = 0; i < storageSize && remaining.getAmount() > 0; i++) {
+            if (!reserved.contains(i) && (contents[i] == null || contents[i].getType().isAir())) {
+                contents[i] = remaining.clone();
+                remaining.setAmount(0);
+            }
+        }
+        return remaining.getAmount() == 0;
     }
 
     /** Remove every item this plugin owns from a player, e.g. on disable so nothing is left behind. */
@@ -77,31 +144,6 @@ public final class ItemService {
                 inv.setItem(i, null);
             }
         }
-    }
-
-    /**
-     * Put the item in its slot, moving anything already there somewhere safe.
-     *
-     * <p>A player's own item is never destroyed to make room: if the inventory is full, the configured
-     * item is skipped this time rather than costing them something they were carrying. It gets another
-     * chance on their next respawn or world change.
-     */
-    private void place(Player player, Inventory inv, HotbarItem item) {
-        int slot = item.slot();
-        ItemStack existing = inv.getItem(slot);
-        if (existing != null && !existing.getType().isAir()) {
-            // Empty the slot before addItem, or a stackable item merges the copy back into the very
-            // slot being vacated and the setItem below destroys it.
-            inv.setItem(slot, null);
-            Map<Integer, ItemStack> leftover = inv.addItem(existing);
-            if (!leftover.isEmpty()) {
-                inv.setItem(slot, leftover.values().iterator().next());
-                plugin.getLogger().fine("Inventory full for " + player.getName() + "; leaving slot "
-                        + (slot + 1) + " alone rather than dropping their item.");
-                return;
-            }
-        }
-        inv.setItem(slot, item.build(key, player));
     }
 
 }

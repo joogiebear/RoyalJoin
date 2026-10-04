@@ -6,9 +6,38 @@ don't have to remember commands.
 Out of the box: a nether star in the far-right hotbar slot that runs `/menu`. Everything about that —
 the slot, the item, its name and lore, the command, which worlds it appears in — is config.
 
+`/menu` is not supplied by RoyalJoin. Install a menu plugin that registers that command, or change
+`items.menu.command` to a command your server already provides.
+
 Part of the Royal plugin suite, but deliberately independent of it: the command it runs is just a
 command, so it works the same whether that opens a menu from this suite, another plugin's GUI, or a
 warp.
+
+---
+
+## Installation
+
+1. Stop the server and place the RoyalJoin jar in the server's `plugins/` directory.
+2. Start the server once. RoyalJoin creates `plugins/RoyalJoin/config.yml` and
+   `plugins/RoyalJoin/worlds/_example.yml`.
+3. Edit `config.yml` and, if needed, add per-world files under `plugins/RoyalJoin/worlds/`.
+4. Run `/royaljoin reload` after configuration-only changes. Restart the server after replacing the
+   jar or changing installed dependencies.
+
+[PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) is optional. When it is
+installed and enabled, PlaceholderAPI placeholders in item names, lore and commands are resolved.
+Without it, RoyalJoin still runs, but those placeholder strings remain unchanged. RoyalJoin's own
+`%player%` command placeholder does not require PlaceholderAPI.
+
+### If the menu item does not appear or `/menu` does nothing
+
+1. Check the startup log for RoyalJoin configuration warnings and confirm the plugin is enabled.
+2. Confirm the player is in an allowed world, has the item's configured `permission`, and has room
+   for an item already occupying the configured slot to be moved.
+3. Run the configured command directly as the player. For the default `menu` command, confirm another
+   enabled plugin actually registers `/menu`.
+4. After correcting configuration, run `/royaljoin reload`; after installing or replacing a plugin
+   jar, restart the server.
 
 ---
 
@@ -105,13 +134,16 @@ royaljoin.admin   default: op   /royaljoin reload
 
 ## Behaviour worth knowing
 
-**It never destroys a player's item.** If something is already in the configured slot, that item is
-moved to a free slot first. If the inventory is full, the configured item is skipped rather than
-costing the player something they were carrying — it gets another chance on their next respawn or
-world change.
+**Inventory refreshes are planned before the live inventory is changed.** The plan removes old
+RoyalJoin-tagged items, places the newly configured items, and relocates ordinary items displaced
+from configured slots. If every displaced ordinary item cannot fit, the refresh is rejected and the
+inventory remains unchanged, including the old tagged items. This rollback behavior has been tested
+with a full inventory and a metadata-rich old tagged item; still test representative inventories on
+a staging server and keep backups.
 
-**Items are re-applied on join, respawn and world change**, and re-applying clears the plugin's items
-first, wherever they ended up. So duplicates can't accumulate, and changing a slot in config doesn't
+**Items are re-applied on join, respawn and world change.** When planning a re-apply, RoyalJoin removes
+its old items from the proposed result, wherever they ended up. The live inventory is replaced only
+after the whole plan succeeds. So duplicates can't accumulate, and changing a slot in config doesn't
 leave the old copy behind. World change matters more than it looks: it's also what fires when another
 plugin moves a player between worlds, so items survive things this plugin knows nothing about.
 
@@ -125,8 +157,11 @@ read — leaving it in your config does nothing.)
 **Two items in one slot get a warning at load.** The later one in the config pushes the earlier to a
 free slot, which is almost never what was meant.
 
-**Careful with placeholders in `as-console` commands.** A placeholder whose value players control — a
-nickname, a display name — puts their text into a command run with full console rights.
+**Treat `as-console` commands as privileged input.** Prefer fixed commands and RoyalJoin's `%player%`
+placeholder, which is replaced with the clicking player's account name. Do not put PlaceholderAPI
+values that players can control (for example nicknames, display names or chat input) into a console
+command. Test the final command with an unprivileged account, and use `as-console: false` unless the
+target command genuinely requires console permissions.
 
 **Items are identified by a tag, not by material or name.** Renaming one, or configuring two items
 that share a material, doesn't confuse it.
@@ -169,4 +204,23 @@ the whole server in `plugins/bStats/config.yml`.
 mvn clean package     # target/RoyalJoin.jar
 ```
 
-Requires Paper 26.2 or newer to run, and JDK 25 to build (paper-api 26.2 ships Java 25 bytecode).
+Building requires JDK 25 or newer because the configured `paper-api 26.2.build.123-stable` dependency
+uses Java 25 class files. RoyalJoin's own classes are emitted as Java 21 bytecode via
+`maven.compiler.release`, and the plugin declares Bukkit/Paper API version `26.2`.
+
+The Java 21 bytecode target is not a verified Java 21 runtime claim: the server and its Paper API must
+also support that runtime.
+
+The final reliability check passed **43 required live-harness assertions** on Paper 26.2 build 129
+with Eclipse Temurin Java 25.0.4.1+1, in addition to the prior 21 automated tests. Login and reconnect,
+container clicks, and use-item checks used real client protocol actions; death and respawn were real
+server lifecycle events. Fixture and configuration changes, permissions, snapshots, teleport,
+reflection, and PlaceholderAPI fault injection were server-side harness actions. Drag, number-key,
+creative, drop, offhand, item-frame, allay, and armor-stand protection checks used synthetic Bukkit
+events rather than client gestures. See the [actual-player harness documentation](qa/player-harness/README.md)
+for the test setup and coverage.
+
+These results are evidence for that exact Paper and Java environment, not a broad compatibility
+guarantee. Other Minecraft versions, Paper builds, server implementations, Java versions, unrelated
+integrations, and load or performance behavior were not verified. Test upgrades on a staging server
+with backups.

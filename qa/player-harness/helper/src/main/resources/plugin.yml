@@ -1,0 +1,14 @@
+name: RoyalJoinHarnessHelper
+version: 1.0.0
+main: com.mystipixel.royaljoin.qa.HarnessHelperPlugin
+api-version: '26.2'
+load: POSTWORLD
+commands:
+  harness:
+    description: QA-only RoyalJoin acceptance assertions
+    permission: royaljoin.harness
+permissions:
+  royaljoin.harness:
+    default: true
+  royaljoin.harness.fixture:
+    default: false

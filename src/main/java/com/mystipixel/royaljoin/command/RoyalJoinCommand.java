@@ -33,7 +33,12 @@ public final class RoyalJoinCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.chat("&cYou don't have permission to do that."));
             return true;
         }
-        plugin.reloadItems();
+        RoyalJoinPlugin.ReloadResult result = plugin.reloadItems();
+        if (!result.success()) {
+            sender.sendMessage(Text.chat("&6RoyalJoin &8» &cReload failed; the previous configuration remains active: &f"
+                    + result.error()));
+            return true;
+        }
         // Re-apply immediately, so a slot or material change is visible without relogging.
         for (Player player : Bukkit.getOnlinePlayers()) {
             plugin.itemService().apply(player);
