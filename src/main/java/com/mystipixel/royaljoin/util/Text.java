@@ -12,10 +12,7 @@ public final class Text {
     private Text() {
     }
 
-    /**
-     * Item names and lore, with the default italic turned off. Minecraft italicises item text unless
-     * told otherwise, which would leave this plugin's items looking unlike everything else.
-     */
+    /** Item names and lore, with Minecraft's default italic turned off. */
     public static Component item(String input) {
         return AMP.deserialize(input == null ? "" : input).decoration(TextDecoration.ITALIC, false);
     }

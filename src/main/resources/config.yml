@@ -1,17 +1,7 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalJoin  ·  Configuration
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Pins items to hotbar slots. Clicking one runs a command — usually to open a
-#  menu, so players don't have to remember commands.
-#
-#  The items below apply in EVERY world. That is all most servers need.
-#
-#  If one world wants something different, add worlds/<world name>.yml — see
-#  worlds/_example.yml. Anything without a file of its own falls back to here.
-#
-#  Apply changes at runtime with /royaljoin reload. Nothing is fixed in code:
-#  the slot, material, name, lore and command are all yours.
-# ═══════════════════════════════════════════════════════════════════════════════
+# RoyalJoin: pins items to hotbar slots; clicking one runs a command.
+# The items below apply in every world. For a world that needs something different,
+# add worlds/<world name>.yml (see worlds/_example.yml).
+# Apply changes with /royaljoin reload.
 
 items:
 
@@ -66,10 +56,8 @@ items:
     # Adds the enchantment shimmer without an enchantment.
     glow: false
 
-# ── Rate limiting ─────────────────────────────────────────────────────────────
-# Two stages. The gap stops a menu re-opening while a click is held; the burst
-# guard catches auto-clickers, which would otherwise happily fire at exactly the
-# gap interval forever.
+# Rate limiting: the gap stops a menu re-opening while a click is held; the burst
+# guard catches auto-clickers firing at exactly the gap interval.
 cooldown:
   # Minimum milliseconds between two activations.
   between-uses-ms: 400
@@ -83,7 +71,7 @@ cooldown:
 
   # Sent once, when the lockout starts. %seconds% is how long it lasts.
   # Leave empty to say nothing at all.
-  message: "&cEasy — that's on cooldown for %seconds%s."
+  message: "&cEasy, that's on cooldown for %seconds%s."
 
 settings:
   # Logs every click on one of these items and what the command did. Turn on when a

@@ -45,15 +45,12 @@ public final class ItemService {
     }
 
     /**
-     * Bring a player's hotbar in line with the config: give what they should have, and take back anything
-     * of ours they shouldn't (a world they've left, a permission they've lost).
-     *
-     * <p>Safe to call repeatedly — it replaces rather than accumulates, which is what makes join,
-     * respawn and world-change all able to call it without risking duplicates.
+     * Bring a player's hotbar in line with the config: give what they should have and take back anything
+     * of ours they shouldn't. Idempotent, so it never creates duplicates.
      */
     public void apply(Player player) {
         PlayerInventory inv = player.getInventory();
-        // Config order, so when two items share a slot the outcome is the same every time.
+        // config order, so a shared slot resolves the same way every time
         Map<String, HotbarItem> wanted = new LinkedHashMap<>();
         for (HotbarItem item : plugin.itemsFor(player.getWorld())) {
             if (item.appliesTo(player)) {

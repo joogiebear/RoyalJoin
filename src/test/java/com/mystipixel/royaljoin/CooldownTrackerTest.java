@@ -11,7 +11,7 @@ class CooldownTrackerTest {
 
     private final UUID player = UUID.randomUUID();
 
-    /** 400ms gap, lockout on the 6th use inside 3s, 5s lockout — the shipped defaults. */
+    // the shipped defaults: 400ms gap, lockout on the 6th use inside 3s, 5s lockout
     private CooldownTracker tracker() {
         CooldownTracker tracker = new CooldownTracker();
         tracker.configure(400, 6, 3000, 5);

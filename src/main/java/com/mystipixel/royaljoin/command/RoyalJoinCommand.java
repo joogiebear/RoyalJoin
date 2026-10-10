@@ -13,7 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 import java.util.Locale;
 
-/** {@code /royaljoin reload} — re-read the config and re-apply items to everyone online. */
+/** {@code /royaljoin reload}: re-read the config and re-apply items to everyone online. */
 public final class RoyalJoinCommand implements CommandExecutor, TabCompleter {
 
     private final RoyalJoinPlugin plugin;
@@ -39,7 +39,6 @@ public final class RoyalJoinCommand implements CommandExecutor, TabCompleter {
                     + result.error()));
             return true;
         }
-        // Re-apply immediately, so a slot or material change is visible without relogging.
         for (Player player : Bukkit.getOnlinePlayers()) {
             plugin.itemService().apply(player);
         }
