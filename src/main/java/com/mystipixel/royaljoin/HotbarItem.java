@@ -16,15 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * One configured hotbar item: what it looks like, where it sits, and what clicking it does.
- *
- * <p>Everything here comes from config — nothing about the item, its slot or its command is fixed in
- * code, so a server can pin whatever it likes wherever it likes.
- */
+/** One configured hotbar item: what it looks like, where it sits, and what clicking it does. */
 public final class HotbarItem {
 
-    /** Which click opens it. */
     public enum ClickType {
         RIGHT, LEFT, EITHER;
 
@@ -50,8 +44,8 @@ public final class HotbarItem {
     private final boolean asConsole;
     private final String permission;     // empty = everyone
     private final List<String> worlds;   // empty = every world
-    private final boolean whitelist;     // how the world list is read
-    private final boolean locked;        // can't be moved, dropped or stored
+    private final boolean whitelist;
+    private final boolean locked;
     private final ClickType click;
     private final boolean glow;
     private final int customModelData;   // -1 = none
@@ -76,9 +70,6 @@ public final class HotbarItem {
         this.customModelData = customModelData;
     }
 
-    /**
-     * Read and validate one item from its config section.
-     */
     public static HotbarItem load(String id, ConfigurationSection sec) throws ConfigException {
         String rawMaterial = stringValue(sec, "material", "NETHER_STAR", id);
         Material material = Material.matchMaterial(rawMaterial);
@@ -112,11 +103,7 @@ public final class HotbarItem {
                 intValue(sec, "custom-model-data", -1, id));
     }
 
-    /**
-     * Build the item for this player, tagged so it can be recognised later regardless of renames.
-     * Name and lore go through PlaceholderAPI (when installed), so they are as fresh as the last
-     * apply — join, respawn, world change or reload.
-     */
+    /** Build the item for this player. Placeholders in name and lore are as fresh as the last apply. */
     public ItemStack build(NamespacedKey key, Player player) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
@@ -136,15 +123,14 @@ public final class HotbarItem {
                 meta.setCustomModelData(customModelData);
             }
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
-            // The tag is what identifies our item. Matching on material or name would break the moment a
-            // server configures two items sharing a material, or renames one.
+            // identify by tag, not material or name: two items can share a material, and names change
             meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, id);
             stack.setItemMeta(meta);
         }
         return stack;
     }
 
-    /** Whether this item should exist for the player right now, in the world they're standing in. */
+    /** Whether this item should exist for the player right now, in their current world. */
     public boolean appliesTo(Player player) {
         if (!permission.isBlank() && !player.hasPermission(permission)) {
             return false;

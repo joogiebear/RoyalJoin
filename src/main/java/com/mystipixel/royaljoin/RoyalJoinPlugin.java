@@ -24,17 +24,14 @@ import java.util.Set;
 import java.util.Collections;
 
 /**
- * Pins configured items to hotbar slots and runs a command when they're clicked.
- *
- * <p>Deliberately knows nothing about any other plugin: the command it runs is just a command, so it
- * works the same whether that opens a menu from this suite, another plugin's GUI, or a warp.
+ * Pins configured items to hotbar slots and runs a command when they're clicked. Knows nothing about
+ * other plugins: the command is just a command, whether it opens a menu, another plugin's GUI or a warp.
  */
 public final class RoyalJoinPlugin extends JavaPlugin {
 
-    /** bStats project id. Identifies the plugin, not the server, so it is fixed rather than configurable. */
+    // identifies the plugin, not the server, so it is fixed rather than configurable
     private static final int BSTATS_PLUGIN_ID = 33888;
 
-    /** Items from config.yml — the catch-all, used by any world without a file of its own. */
     record ActiveConfig(Map<String, HotbarItem> defaults,
                                 Map<String, Map<String, HotbarItem>> perWorld,
                                 Map<String, Boolean> inheritsDefault,
@@ -72,20 +69,14 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         }
 
         setupMetrics();
-        getLogger().info("RoyalJoin enabled — " + itemCount() + " item(s) configured.");
+        getLogger().info("RoyalJoin enabled: " + itemCount() + " item(s) configured.");
     }
 
-    /**
-     * Anonymous usage reporting via bStats.
-     *
-     * <p>Server owners who want no reporting disable it globally in plugins/bStats/config.yml, which
-     * is the mechanism bStats provides; the id itself is fixed because it names this plugin's project.
-     */
+    // opting out is done globally in plugins/bStats/config.yml
     private void setupMetrics() {
         Metrics metrics = new Metrics(this, BSTATS_PLUGIN_ID);
         metrics.addCustomChart(new SimplePie("item_count", () -> String.valueOf(itemCount())));
-        // Whether the worlds/ folder is being used at all — the per-world override is the part of
-        // this plugin most likely to be dead weight, so it is worth knowing if anyone reaches for it.
+        // per-world overrides are the feature most likely to be unused, so track whether anyone uses them
         metrics.addCustomChart(new SimplePie("per_world_items",
                 () -> String.valueOf(!active.perWorld().isEmpty())));
         metrics.addCustomChart(new SimplePie("placeholderapi",
@@ -94,8 +85,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Take our items back rather than leaving them behind as ordinary items that would then be
-        // duplicated by the next startup, or sold, or dropped.
+        // take our items back, or they stay behind as ordinary items to be duplicated, sold or dropped
         if (itemService != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 itemService.clear(player);
@@ -104,12 +94,8 @@ public final class RoyalJoinPlugin extends JavaPlugin {
     }
 
     /**
-     * Re-read every item definition.
-     *
-     * <p>config.yml holds the items that apply everywhere — the catch-all. A world only needs a file in
-     * worlds/ when it wants something different, so a server with one setup never touches that folder.
-     *
-     * <p>The complete candidate is validated before it replaces the live configuration.
+     * Re-read config.yml and worlds/*.yml. The whole candidate is validated before it replaces the live
+     * configuration, so a rejected reload keeps the last-good one.
      */
     public ReloadResult reloadItems() {
         try {
@@ -244,11 +230,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         return new ArrayList<>(merged.values());
     }
 
-    /**
-     * Two effective items in one slot cannot both be installed. Almost always a config mistake, so warn
-     * at load time as well as rejecting the conflicting effective set atomically at apply time.
-     * Items limited by permission or world may never actually meet, which is why this only warns.
-     */
+    // only warns: items limited by permission or world may never meet; a real clash is rejected at apply time
     private void warnSlotClashes(List<HotbarItem> items, Set<String> ownIds, String source) {
         Map<Integer, String> bySlot = new HashMap<>();
         for (HotbarItem item : items) {
@@ -280,12 +262,10 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         return active.defaults().get(id);
     }
 
-    /** Every item defined anywhere, for the reload summary. */
     public int itemCount() {
         return active.defaults().size() + active.perWorld().values().stream().mapToInt(Map::size).sum();
     }
 
-    /** Extra console output while working out why a click isn't doing what you expect. */
     public boolean debug() {
         return active.debug();
     }

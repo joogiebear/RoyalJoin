@@ -28,11 +28,9 @@ import org.bukkit.inventory.ItemStack;
 import java.util.Iterator;
 
 /**
- * Keeps configured items where they belong, and turns a click into a command.
- *
- * <p>Items are re-applied on join, respawn and world change. World change matters more than it looks:
- * it is also what fires when another plugin moves a player between worlds — a per-profile skyblock
- * swap, a farming server portal — so the item survives those without this plugin knowing about them.
+ * Keeps configured items where they belong, and turns a click into a command. World change also fires
+ * when another plugin moves a player between worlds (a skyblock profile swap, a portal), so re-applying
+ * there keeps the items without knowing about those plugins.
  */
 public final class JoinListener implements Listener {
 
@@ -46,8 +44,7 @@ public final class JoinListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
-        // A tick later: plugins that restore or clear inventories on join run at their own priorities,
-        // and applying before them would just be overwritten.
+        // next tick: plugins that restore or clear inventories on join would otherwise overwrite us
         reapplyNextTick(event.getPlayer());
     }
 
@@ -69,12 +66,7 @@ public final class JoinListener implements Listener {
         });
     }
 
-    /**
-     * Take our items out of the death drops. Respawn hands out fresh copies, so a copy left in the drops
-     * would be a second one lying on the ground for anyone to pick up and click.
-     *
-     * <p>LOWEST, so it runs before grave and death-chest plugins collect the drops and store a copy.
-     */
+    // respawn hands out fresh copies, so strip ours from the drops; LOWEST so it runs before grave plugins
     @EventHandler(priority = EventPriority.LOWEST)
     public void onDeath(PlayerDeathEvent event) {
         Iterator<ItemStack> it = event.getDrops().iterator();
@@ -89,8 +81,6 @@ public final class JoinListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         plugin.cooldowns().forget(event.getPlayer());   // keep the tracker bounded
     }
-
-    // ── protection ───────────────────────────────────────────────────────────────
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onClick(InventoryClickEvent event) {
@@ -130,11 +120,8 @@ public final class JoinListener implements Listener {
         }
     }
 
-    /**
-     * Right-clicking an entity doesn't fire PlayerInteractEvent, so without this a locked item could be
-     * put in an item frame or handed to an allay, and then taken by anyone. Only those two are
-     * blocked: a hub's selector is usually in hand, and villagers, mounts and NPCs must stay usable.
-     */
+    // entity clicks don't fire PlayerInteractEvent; only frames and allays can take the item, and
+    // villagers, mounts and NPCs must stay usable with the selector in hand
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
         if (!(event.getRightClicked() instanceof ItemFrame) && !(event.getRightClicked() instanceof Allay)) {
@@ -146,7 +133,7 @@ public final class JoinListener implements Listener {
         }
     }
 
-    /** Armor stands have their own event for taking an item from a player's hand. */
+    // armor stands have their own event for taking an item from a player's hand
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onArmorStand(PlayerArmorStandManipulateEvent event) {
         if (locked(event.getPlayer(), event.getPlayerItem())) {
@@ -154,28 +141,19 @@ public final class JoinListener implements Listener {
         }
     }
 
-    /**
-     * Whether a stack is one of ours and pinned in place. Resolved against the player's world, since a
-     * world file can define the same id with different behaviour.
-     */
+    // resolved against the player's world, since a world file can redefine the same id
     private boolean locked(Player player, ItemStack stack) {
         String id = items.idOf(stack);
         if (id == null) {
             return false;
         }
         HotbarItem item = plugin.item(player.getWorld(), id);
-        // An item we tagged but can no longer resolve is still ours; keep it locked so it can't be
-        // stashed or sold after a config change removed it.
+        // tagged but no longer configured: keep it locked so it can't be stashed or sold
         return item == null || item.locked();
     }
 
-    // ── the actual point of the plugin ───────────────────────────────────────────
-
-    /**
-     * Deliberately NOT ignoreCancelled: protection plugins routinely cancel interact events (WorldGuard
-     * denying build or use in a hub, for example), and the click would then never reach us. Our item
-     * isn't placing or breaking anything, so acting on a cancelled event is safe here.
-     */
+    // not ignoreCancelled: protection plugins (WorldGuard in a hub) cancel interacts, and our item
+    // places or breaks nothing, so acting on a cancelled event is safe
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInteract(PlayerInteractEvent event) {
         // The event fires once per hand; without this the command would run twice per click.
@@ -193,8 +171,7 @@ public final class JoinListener implements Listener {
         Player player = event.getPlayer();
         HotbarItem item = plugin.item(player.getWorld(), id);
         if (item == null) {
-            // Ours, but nothing by that id applies here any more (removed from config, or a world that
-            // doesn't inherit it). Don't let it place or break anything; swap it for what should be here.
+            // ours, but no longer applies here (removed, or a world that doesn't inherit it): swap it out
             event.setCancelled(true);
             reapplyNextTick(player);
             return;
@@ -215,9 +192,8 @@ public final class JoinListener implements Listener {
         }
         event.setCancelled(true);
 
-        // Permission and world are checked again at the click, not only when the item is handed out: a
-        // player who has just lost the permission (an expired rank, say) still holds the item until the
-        // next apply, and it must not keep working for them — least of all an as-console one.
+        // re-check at click time: a player who just lost the permission still holds the item until the
+        // next apply, and it must not keep working (especially an as-console one)
         if (!item.appliesTo(player)) {
             if (plugin.debug()) {
                 plugin.getLogger().info("[debug] " + player.getName() + " no longer qualifies for '" + id
@@ -229,8 +205,7 @@ public final class JoinListener implements Listener {
 
         CooldownTracker.Result gate = plugin.cooldowns().check(player);
         if (gate != CooldownTracker.Result.ALLOW) {
-            // Only speak when the lockout trips. Messaging every blocked click would turn an
-            // auto-clicker into chat spam, which is worse than the thing being prevented.
+            // message only when the lockout trips, or an auto-clicker becomes chat spam
             if (gate == CooldownTracker.Result.LOCKED_OUT_NOW) {
                 String message = plugin.cooldownMessage();
                 if (message != null && !message.isBlank()) {
