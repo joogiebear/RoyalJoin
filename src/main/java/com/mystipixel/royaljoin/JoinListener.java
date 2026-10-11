@@ -6,13 +6,16 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Allay;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -22,7 +25,10 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.inventory.CraftingInventory;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Iterator;
@@ -95,19 +101,87 @@ public final class JoinListener implements Listener {
         if (event.getClick() == ClickType.NUMBER_KEY
                 && locked(player, player.getInventory().getItem(event.getHotbarButton()))) {
             event.setCancelled(true);
+            return;
         }
+        if (leavesPlayerInventory(event, player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    // Applies to unlocked items too: apply only sees the player's own inventory, so a copy left anywhere
+    // else (a chest, the crafting grid, a bundle) is a free extra one once the next apply hands out another.
+    private boolean leavesPlayerInventory(InventoryClickEvent event, Player player) {
+        ItemStack cursor = event.getCursor();
+        ItemStack current = event.getCurrentItem();
+        if (isIntoBundle(event.getAction()) && (items.isOurs(cursor) || items.isOurs(current))) {
+            return true;
+        }
+        InventoryView view = event.getView();
+        int raw = event.getRawSlot();
+        if (raw == InventoryView.OUTSIDE) {
+            return items.isOurs(cursor);
+        }
+        boolean inTop = raw >= 0 && raw < view.getTopInventory().getSize();
+        if (inTop) {
+            if (items.isOurs(cursor)) {
+                return true;
+            }
+            return switch (event.getClick()) {
+                case NUMBER_KEY -> items.isOurs(player.getInventory().getItem(event.getHotbarButton()));
+                case SWAP_OFFHAND -> items.isOurs(player.getInventory().getItemInOffHand());
+                default -> false;
+            };
+        }
+        return event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY
+                && items.isOurs(current)
+                && !isOwnInventoryView(view.getTopInventory());
+    }
+
+    // the player's own inventory screen has the 2x2 grid on top, and shift-click never moves items into it
+    private static boolean isOwnInventoryView(Inventory top) {
+        return top instanceof CraftingInventory && top.getSize() == 5;
+    }
+
+    private static boolean isIntoBundle(InventoryAction action) {
+        return action == InventoryAction.PICKUP_ALL_INTO_BUNDLE
+                || action == InventoryAction.PICKUP_SOME_INTO_BUNDLE
+                || action == InventoryAction.PLACE_ALL_INTO_BUNDLE
+                || action == InventoryAction.PLACE_SOME_INTO_BUNDLE;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onDrag(InventoryDragEvent event) {
-        if (event.getWhoClicked() instanceof Player player && locked(player, event.getOldCursor())) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        ItemStack dragged = event.getOldCursor();
+        if (locked(player, dragged)) {
             event.setCancelled(true);
+            return;
+        }
+        if (items.isOurs(dragged)) {
+            int topSize = event.getView().getTopInventory().getSize();
+            if (event.getRawSlots().stream().anyMatch(raw -> raw < topSize)) {
+                event.setCancelled(true);
+            }
+        }
+    }
+
+    // a copy used up in a recipe comes back at the next apply, so it would be a free ingredient
+    @EventHandler(priority = EventPriority.LOW)
+    public void onPrepareCraft(PrepareItemCraftEvent event) {
+        CraftingInventory grid = event.getInventory();
+        for (ItemStack ingredient : grid.getMatrix()) {
+            if (items.isOurs(ingredient)) {
+                grid.setResult(null);
+                return;
+            }
         }
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onDrop(PlayerDropItemEvent event) {
-        if (locked(event.getPlayer(), event.getItemDrop().getItemStack())) {
+        if (items.isOurs(event.getItemDrop().getItemStack())) {
             event.setCancelled(true);
         }
     }
@@ -128,7 +202,7 @@ public final class JoinListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
-        if (locked(player, player.getInventory().getItem(event.getHand()))) {
+        if (items.isOurs(player.getInventory().getItem(event.getHand()))) {
             event.setCancelled(true);
         }
     }
@@ -136,7 +210,7 @@ public final class JoinListener implements Listener {
     // armor stands have their own event for taking an item from a player's hand
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onArmorStand(PlayerArmorStandManipulateEvent event) {
-        if (locked(event.getPlayer(), event.getPlayerItem())) {
+        if (items.isOurs(event.getPlayerItem())) {
             event.setCancelled(true);
         }
     }
@@ -158,6 +232,10 @@ public final class JoinListener implements Listener {
     public void onInteract(PlayerInteractEvent event) {
         // The event fires once per hand; without this the command would run twice per click.
         if (event.getHand() != EquipmentSlot.HAND) {
+            // an unlocked item can sit in the off-hand; don't let it be placed, eaten or thrown from there
+            if (items.isOurs(event.getItem())) {
+                event.setUseItemInHand(Event.Result.DENY);
+            }
             return;
         }
         String id = items.idOf(event.getItem());
@@ -187,6 +265,9 @@ public final class JoinListener implements Listener {
             // Still cancel, so a locked item can't place a block or break one.
             if (item.locked()) {
                 event.setCancelled(true);
+            } else {
+                // a placed, eaten or thrown copy is replaced at the next apply
+                event.setUseItemInHand(Event.Result.DENY);
             }
             return;
         }

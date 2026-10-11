@@ -59,7 +59,7 @@ items:
     permission: ""            # empty gives it to everyone; re-checked on every click
     worlds: []                # empty means every world
     world-mode: blacklist     # blacklist = all except those listed; whitelist = only those
-    locked: true              # can't be moved, dropped, stored, swapped to the off-hand or framed
+    locked: true              # true pins it to its slot; false lets players move it within their inventory
     glow: false
 ```
 
@@ -155,6 +155,11 @@ mid-session — an expired rank, say — can't keep using it; the click takes it
 **Items never drop on death.** They're taken out of the death drops before grave or death-chest
 plugins see them, and respawning hands out a fresh copy. (The old `keep-on-death` option is no longer
 read — leaving it in your config does nothing.)
+
+**Items never leave the player's inventory.** `locked: false` only lets players rearrange an item within
+their own inventory and off-hand. Whatever `locked` says, it can't be dropped, stored, put in a bundle,
+frame or armor stand, crafted with, or placed, eaten or thrown, because the next join, respawn or world
+change hands out a fresh copy and the old one would be a free extra.
 
 **Two items in one slot get a warning at load.** The later one in the config pushes the earlier to a
 free slot, which is almost never what was meant.
