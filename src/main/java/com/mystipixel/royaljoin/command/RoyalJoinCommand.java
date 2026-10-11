@@ -1,7 +1,7 @@
 package com.mystipixel.royaljoin.command;
 
 import com.mystipixel.royaljoin.RoyalJoinPlugin;
-import com.mystipixel.royaljoin.util.Text;
+import com.mystipixel.royaljoin.message.MessageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -17,33 +17,35 @@ import java.util.Locale;
 public final class RoyalJoinCommand implements CommandExecutor, TabCompleter {
 
     private final RoyalJoinPlugin plugin;
+    private final MessageManager messages;
 
-    public RoyalJoinCommand(RoyalJoinPlugin plugin) {
+    public RoyalJoinCommand(RoyalJoinPlugin plugin, MessageManager messages) {
         this.plugin = plugin;
+        this.messages = messages;
     }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, String[] args) {
         if (args.length == 0 || !args[0].equalsIgnoreCase("reload")) {
-            sender.sendMessage(Text.chat("&6RoyalJoin &8» &7Usage: &f/" + label + " reload"));
+            messages.send(sender, "usage", "label", label);
             return true;
         }
         if (!sender.hasPermission("royaljoin.admin")) {
-            sender.sendMessage(Text.chat("&cYou don't have permission to do that."));
+            messages.send(sender, "no-permission");
             return true;
         }
+        messages.reload();
         RoyalJoinPlugin.ReloadResult result = plugin.reloadItems();
         if (!result.success()) {
-            sender.sendMessage(Text.chat("&6RoyalJoin &8» &cReload failed; the previous configuration remains active: &f"
-                    + result.error()));
+            messages.send(sender, "reload-failed", "error", result.error());
             return true;
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
             plugin.itemService().apply(player);
         }
-        sender.sendMessage(Text.chat("&6RoyalJoin &8» &aReloaded &f" + plugin.itemCount()
-                + "&a item(s) and refreshed &f" + Bukkit.getOnlinePlayers().size() + "&a player(s)."));
+        messages.send(sender, "reloaded", "items", String.valueOf(plugin.itemCount()),
+                "players", String.valueOf(Bukkit.getOnlinePlayers().size()));
         return true;
     }
 
