@@ -15,6 +15,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -158,7 +162,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
         return new ActiveConfig(immutableOrdered(defaults), immutableOrdered(perWorld),
                 immutableOrdered(inheritsDefault),
                 betweenUses, spamThreshold, spamWindow, lockout,
-                stringValue(main, "cooldown.message", "", "config.yml"),
+                stringValue(main, "cooldown.message", bundledString("cooldown.message"), "config.yml"),
                 booleanValue(main, "settings.debug", false, "config.yml"));
     }
 
@@ -319,6 +323,20 @@ public final class RoyalJoinPlugin extends JavaPlugin {
             throw new ConfigException(source + ": " + path + " must be true or false");
         }
         return value;
+    }
+
+    // the jar's config.yml is the one copy of the default text; only single keys are taken from it,
+    // so a server that removed its items section doesn't get the example items back
+    static String bundledString(String path) {
+        try (InputStream in = RoyalJoinPlugin.class.getResourceAsStream("/config.yml")) {
+            if (in == null) {
+                throw new IllegalStateException("config.yml is missing from the jar");
+            }
+            return YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8))
+                    .getString(path, "");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static String stringValue(ConfigurationSection cfg, String path, String fallback, String source)
