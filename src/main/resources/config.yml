@@ -48,9 +48,12 @@ items:
     worlds: []
     world-mode: blacklist
 
-    # true - can't be moved, dropped, stored in a chest, swapped to the off-hand,
-    #        or put in an item frame or on an armor stand.
-    # These items never drop on death either way; respawning hands out a fresh one.
+    # true  - stays in its slot: can't be moved or swapped to the off-hand.
+    # false - players can move it around their own inventory and off-hand.
+    # Either way it never leaves their inventory: it can't be dropped, stored in a
+    # chest, put in a bundle, item frame or armor stand, used in crafting, or placed,
+    # eaten or thrown. Each join, respawn and world change hands out a fresh one, so
+    # a copy kept anywhere else would be a free extra. It never drops on death.
     locked: true
 
     # Adds the enchantment shimmer without an enchantment.
