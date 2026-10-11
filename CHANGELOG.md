@@ -1,3 +1,14 @@
+## 2026.41.0 - 2026-10-10
+
+### Fixes
+- show the shipped cooldown message when the key is missing (#10) (`06131c7`)
+
+### Refactors
+- read all player-facing text from config (#9) (`201986f`)
+
+### Documentation
+- add AGENTS.md with the suite's development standards (#6) (`8481a11`)
+
 ## 2026.40.0 — 2026-10-03
 
 ### 🐛 Fixes
