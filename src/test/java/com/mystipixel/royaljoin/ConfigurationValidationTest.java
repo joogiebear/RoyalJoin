@@ -66,6 +66,19 @@ class ConfigurationValidationTest {
         assertTrue(good.debug());
     }
 
+    @Test
+    void aMissingCooldownMessageFallsBackToTheShippedText() throws Exception {
+        validMain();
+        assertEquals("&cEasy, that's on cooldown for %seconds%s.",
+                RoyalJoinPlugin.loadCandidate(data.toFile()).cooldownMessage());
+    }
+
+    @Test
+    void anEmptyCooldownMessageStaysSilent() throws Exception {
+        write("config.yml", "items: {}\ncooldown:\n  message: \"\"\n");
+        assertEquals("", RoyalJoinPlugin.loadCandidate(data.toFile()).cooldownMessage());
+    }
+
     private String item(String mode, String command) {
         return "items:\n  menu:\n    material: NETHER_STAR\n    slot: 9\n    command: \""
                 + command + "\"\n    world-mode: \"" + mode + "\"\n";
