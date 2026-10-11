@@ -1,0 +1,8 @@
+# RoyalJoin messages (the /royaljoin command). Colour codes use &. Placeholders look like %label%.
+# A key missing from this file falls back to the plugin's built-in default.
+# Set a line to "" to hide it. The click cooldown message is in config.yml (cooldown.message).
+
+usage: "&6RoyalJoin &8» &7Usage: &f/%label% reload"
+no-permission: "&cYou don't have permission to do that."
+reload-failed: "&6RoyalJoin &8» &cReload failed; the previous configuration remains active: &f%error%"
+reloaded: "&6RoyalJoin &8» &aReloaded &f%items%&a item(s) and refreshed &f%players%&a player(s)."

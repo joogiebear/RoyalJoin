@@ -1,6 +1,7 @@
 package com.mystipixel.royaljoin;
 
 import com.mystipixel.royaljoin.command.RoyalJoinCommand;
+import com.mystipixel.royaljoin.message.MessageManager;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
@@ -57,7 +58,7 @@ public final class RoyalJoinPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new JoinListener(this, itemService), this);
 
-        RoyalJoinCommand command = new RoyalJoinCommand(this);
+        RoyalJoinCommand command = new RoyalJoinCommand(this, new MessageManager(this));
         if (getCommand("royaljoin") != null) {
             getCommand("royaljoin").setExecutor(command);
             getCommand("royaljoin").setTabCompleter(command);

@@ -18,7 +18,7 @@ warp.
 ## Installation
 
 1. Stop the server and place the RoyalJoin jar in the server's `plugins/` directory.
-2. Start the server once. RoyalJoin creates `plugins/RoyalJoin/config.yml` and
+2. Start the server once. RoyalJoin creates `plugins/RoyalJoin/config.yml`, `messages.yml` and
    `plugins/RoyalJoin/worlds/_example.yml`.
 3. Edit `config.yml` and, if needed, add per-world files under `plugins/RoyalJoin/worlds/`.
 4. Run `/royaljoin reload` after configuration-only changes. Restart the server after replacing the
@@ -121,6 +121,8 @@ the last `spam-window-ms`.
 ```text
 /royaljoin reload     Reload config and per-world files, and refresh everyone online
 ```
+
+The command's own output is in `messages.yml`. A line missing from your copy uses the plugin's built-in default.
 
 Alias: `/rj`.
 
