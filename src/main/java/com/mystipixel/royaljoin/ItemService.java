@@ -5,7 +5,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.LinkedHashMap;
@@ -36,8 +35,8 @@ public final class ItemService {
         if (stack == null || !stack.hasItemMeta()) {
             return null;
         }
-        ItemMeta meta = stack.getItemMeta();
-        return meta == null ? null : meta.getPersistentDataContainer().get(key, PersistentDataType.STRING);
+        // the read-only view: called on every click and interact, and getItemMeta() copies the whole meta
+        return stack.getPersistentDataContainer().get(key, PersistentDataType.STRING);
     }
 
     public boolean isOurs(ItemStack stack) {
